@@ -209,6 +209,13 @@
       <div class="auth-panel active" id="panel-login">
         <form id="login-form" class="card">
           <div class="field">
+            <label>I am signing in as</label>
+            <div class="role-toggle">
+              <button type="button" class="role-btn active" data-role="client">Client</button>
+              <button type="button" class="role-btn" data-role="admin">Coach / Admin</button>
+            </div>
+          </div>
+          <div class="field">
             <label for="login-email">Email</label>
             <input type="email" id="login-email" required autocomplete="email">
           </div>
@@ -216,6 +223,7 @@
             <label for="login-password">Password</label>
             <input type="password" id="login-password" required autocomplete="current-password">
           </div>
+          <input type="hidden" id="login-role" value="client">
           <button type="submit" class="btn btn-dark" style="width:100%;">Sign in</button>
           <p class="error-text" id="login-error" style="display:none;"></p>
         </form>
@@ -269,6 +277,15 @@
 <script src="js/config.js"></script>
 <script src="js/api.js"></script>
 <script>
+  // Admin / Client role toggle on the login form
+  document.querySelectorAll('.role-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.role-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('login-role').value = btn.dataset.role;
+    });
+  });
+
   // Tab switching
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -292,6 +309,7 @@
     e.preventDefault();
     const errEl = document.getElementById('login-error');
     errEl.style.display = 'none';
+    const selectedRole = document.getElementById('login-role').value;
     try {
       const data = await apiRequest('/auth/login', {
         method: 'POST', auth: false,
@@ -300,6 +318,13 @@
           password: document.getElementById('login-password').value
         }
       });
+      if (data.user.role !== selectedRole) {
+        throw new Error(
+          selectedRole === 'admin'
+            ? "This email belongs to a client account. Switch to \"Client\" above to sign in."
+            : "This email belongs to the coach/admin account. Switch to \"Coach / Admin\" above to sign in."
+        );
+      }
       setSession(data.token, data.user);
       window.location.href = data.user.role === 'admin' ? 'admin/dashboard.html' : 'client/dashboard.html';
     } catch (err) {

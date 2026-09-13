@@ -95,6 +95,13 @@
 .tab-bar { display: flex; gap: 4px; background: var(--line); padding: 4px; border-radius: var(--radius-sm); margin-bottom: 24px; width: fit-content; }
 .tab-btn { padding: 8px 18px; border: none; background: transparent; border-radius: 3px; font-size: 14px; font-weight: 600; color: #55594E; }
 .tab-btn.active { background: var(--paper-raised); color: var(--ink); }
+
+.role-toggle { display: flex; gap: 8px; }
+.role-btn {
+  flex: 1; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--paper-raised); font-size: 14px; font-weight: 600; color: #55594E;
+}
+.role-btn.active { border-color: var(--ink); background: var(--ink); color: var(--paper); }
 .auth-panel { display: none; }
 .auth-panel.active { display: block; }
 

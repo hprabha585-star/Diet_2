@@ -63,9 +63,10 @@ async function loadRoster() {
         <td>${c.waterMl} ml</td>
         <td>${c.completionPercent}%</td>
         <td>${c.points}</td>
-        <td>
+        <td style="white-space:nowrap;">
           ${c.status === 'active' ? `<button class="btn btn-outline btn-sm" onclick="openRegimenModal('${c._id}','${c.name.replace(/'/g, "\\'")}',${c.day})">Assign plan</button>` : ''}
           ${c.status === 'pending_payment' ? `<button class="btn btn-dark btn-sm" onclick="activateClient('${c._id}')">Activate</button>` : ''}
+          <button class="btn btn-ghost btn-sm" onclick="openResetPwModal('${c._id}','${c.name.replace(/'/g, "\\'")}')">Reset password</button>
         </td>
       </tr>
     `).join('') || '<tr><td colspan="8" style="color:#6B6F63;">No clients yet.</td></tr>';
@@ -80,6 +81,74 @@ async function activateClient(id) {
     await apiRequest(`/admin/clients/${id}/activate`, { method: 'POST' });
     loadRoster();
   } catch (err) { alert(err.message); }
+}
+
+/* ---------------- Add client modal ---------------- */
+function openAddClientModal() {
+  document.getElementById('ac-name').value = '';
+  document.getElementById('ac-email').value = '';
+  document.getElementById('ac-phone').value = '';
+  document.getElementById('ac-password').value = '';
+  document.getElementById('ac-tier').value = 'none';
+  document.getElementById('ac-activate').checked = false;
+  document.getElementById('ac-error').style.display = 'none';
+  document.getElementById('ac-success').style.display = 'none';
+  document.getElementById('add-client-modal').classList.add('open');
+}
+function closeAddClientModal() {
+  document.getElementById('add-client-modal').classList.remove('open');
+}
+async function submitAddClient() {
+  const errEl = document.getElementById('ac-error');
+  const okEl = document.getElementById('ac-success');
+  errEl.style.display = 'none';
+  okEl.style.display = 'none';
+  try {
+    const body = {
+      name: document.getElementById('ac-name').value,
+      email: document.getElementById('ac-email').value,
+      phone: document.getElementById('ac-phone').value,
+      password: document.getElementById('ac-password').value,
+      tier: document.getElementById('ac-tier').value,
+      activateNow: document.getElementById('ac-activate').checked
+    };
+    await apiRequest('/admin/clients', { method: 'POST', body });
+    okEl.textContent = 'Client created — share the email and password with them so they can sign in.';
+    okEl.style.display = 'block';
+    loadRoster();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  }
+}
+
+/* ---------------- Reset password modal ---------------- */
+function openResetPwModal(clientId, name) {
+  document.getElementById('rp-client-id').value = clientId;
+  document.getElementById('rp-client-name').textContent = name;
+  document.getElementById('rp-password').value = '';
+  document.getElementById('rp-error').style.display = 'none';
+  document.getElementById('rp-success').style.display = 'none';
+  document.getElementById('reset-pw-modal').classList.add('open');
+}
+function closeResetPwModal() {
+  document.getElementById('reset-pw-modal').classList.remove('open');
+}
+async function submitResetPassword() {
+  const errEl = document.getElementById('rp-error');
+  const okEl = document.getElementById('rp-success');
+  errEl.style.display = 'none';
+  okEl.style.display = 'none';
+  try {
+    const clientId = document.getElementById('rp-client-id').value;
+    const newPassword = document.getElementById('rp-password').value;
+    await apiRequest(`/admin/clients/${clientId}/reset-password`, { method: 'POST', body: { newPassword } });
+    okEl.textContent = 'Password updated — share it with the client.';
+    okEl.style.display = 'block';
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  }
 }
 
 async function loadPayments() {

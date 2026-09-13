@@ -1,14 +1,68 @@
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const Payment = require('../models/Payment');
 const Regimen = require('../models/Regimen');
 const ChecklistLog = require('../models/ChecklistLog');
 const Payout = require('../models/Payout');
 const { requireAuth, requireRole } = require('../middleware/auth');
-const { computeFastingState } = require('../utils/helpers');
+const { computeFastingState, generateReferralCode } = require('../utils/helpers');
 
 const router = express.Router();
 router.use(requireAuth, requireRole('admin'));
+
+// POST /api/admin/clients — coach creates a client account directly.
+// Always goes through bcrypt here, so credentials are guaranteed to work at
+// login. Use this instead of adding documents to MongoDB by hand.
+router.post('/clients', async (req, res) => {
+  try {
+    const { name, email, phone, password, tier, activateNow } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Name, email and password are required' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+    const existing = await User.findOne({ email: email.toLowerCase() });
+    if (existing) return res.status(409).json({ error: 'An account with this email already exists' });
+
+    let code;
+    do {
+      code = generateReferralCode(name);
+    } while (await User.findOne({ referralCode: code }));
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const client = await User.create({
+      name, email: email.toLowerCase(), phone, passwordHash,
+      role: 'client', referralCode: code,
+      tier: tier || 'none',
+      status: activateNow ? 'active' : 'pending_payment',
+      challengeStartDate: activateNow ? new Date() : undefined
+    });
+    res.status(201).json({ client: client.toSafeJSON() });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not create client', detail: err.message });
+  }
+});
+
+// POST /api/admin/clients/:id/reset-password — set a fresh, correctly
+// hashed password for a client (e.g. if they're locked out).
+router.post('/clients/:id/reset-password', async (req, res) => {
+  try {
+    const { newPassword } = req.body;
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    }
+    const client = await User.findById(req.params.id);
+    if (!client || client.role !== 'client') return res.status(404).json({ error: 'Client not found' });
+
+    client.passwordHash = await bcrypt.hash(newPassword, 10);
+    await client.save();
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not reset password', detail: err.message });
+  }
+});
 
 // GET /api/admin/clients — full roster with live status
 router.get('/clients', async (req, res) => {

@@ -33,6 +33,9 @@
 
       <!-- ROSTER -->
       <section id="view-roster">
+        <div style="display:flex; justify-content:flex-end; margin-bottom:16px;">
+          <button class="btn btn-primary btn-sm" onclick="openAddClientModal()">+ Add client</button>
+        </div>
         <div class="card">
           <table class="table">
             <thead><tr><th>Client</th><th>Day</th><th>Status</th><th>Fasting state</th><th>Water</th><th>Adherence</th><th>Points</th><th></th></tr></thead>
@@ -120,6 +123,69 @@
       <button class="btn btn-outline" onclick="closeRegimenModal()">Cancel</button>
     </div>
     <p class="error-text" id="regimen-error" style="display:none;"></p>
+  </div>
+</div>
+
+<!-- Add client modal -->
+<div class="modal-backdrop" id="add-client-modal">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-head">
+      <h3>Add a client</h3>
+      <button class="modal-close" onclick="closeAddClientModal()">&times;</button>
+    </div>
+    <p class="hint" style="margin-top:-8px; margin-bottom:16px;">
+      Creates a proper hashed password so the client can sign in immediately —
+      use this instead of adding documents in MongoDB directly.
+    </p>
+    <div class="field">
+      <label for="ac-name">Full name</label>
+      <input type="text" id="ac-name" required>
+    </div>
+    <div class="field">
+      <label for="ac-email">Email</label>
+      <input type="email" id="ac-email" required>
+    </div>
+    <div class="field">
+      <label for="ac-phone">Phone</label>
+      <input type="tel" id="ac-phone">
+    </div>
+    <div class="field">
+      <label for="ac-password">Temporary password</label>
+      <input type="text" id="ac-password" placeholder="Share this with the client" required minlength="6">
+    </div>
+    <div class="field">
+      <label for="ac-tier">Tier</label>
+      <select id="ac-tier">
+        <option value="none">Not chosen yet</option>
+        <option value="standard">Standard</option>
+        <option value="vip">VIP / Clinical</option>
+      </select>
+    </div>
+    <div class="field" style="display:flex; align-items:center; gap:8px;">
+      <input type="checkbox" id="ac-activate" style="width:auto;">
+      <label for="ac-activate" style="margin:0;">Activate immediately (skip payment approval)</label>
+    </div>
+    <button class="btn btn-primary" style="width:100%;" onclick="submitAddClient()">Create client</button>
+    <p class="error-text" id="ac-error" style="display:none;"></p>
+    <p class="success-text" id="ac-success" style="display:none;"></p>
+  </div>
+</div>
+
+<!-- Reset password modal -->
+<div class="modal-backdrop" id="reset-pw-modal">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-head">
+      <h3>Reset password — <span id="rp-client-name"></span></h3>
+      <button class="modal-close" onclick="closeResetPwModal()">&times;</button>
+    </div>
+    <input type="hidden" id="rp-client-id">
+    <div class="field">
+      <label for="rp-password">New password</label>
+      <input type="text" id="rp-password" minlength="6" placeholder="Share this with the client">
+    </div>
+    <button class="btn btn-primary" style="width:100%;" onclick="submitResetPassword()">Set new password</button>
+    <p class="error-text" id="rp-error" style="display:none;"></p>
+    <p class="success-text" id="rp-success" style="display:none;"></p>
   </div>
 </div>
 
