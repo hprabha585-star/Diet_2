@@ -1,0 +1,89 @@
+/* ============================================================
+   FastCoach design tokens
+   Subject: coach-led fasting cohort — discipline, structure,
+   the daily burn of a fast, and the quiet confidence of a streak.
+   ============================================================ */
+:root {
+  --ink:        #16211D;
+  --paper:      #F2F1E9;
+  --paper-raised: #FFFFFF;
+  --ember:      #B8752E;
+  --ember-dim:  #E7D6BE;
+  --forest:     #1F4B3F;
+  --forest-dim: #DCE7DF;
+  --success:    #3F7D58;
+  --danger:     #A8402F;
+  --line:       #D8D4C6;
+  --line-dark:  #33443B;
+
+  --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --font-body: "Inter", "Helvetica Neue", Arial, sans-serif;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --container: 1120px;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  color: var(--ink);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, h4 { font-family: var(--font-display); margin: 0; font-weight: 600; }
+p { line-height: 1.55; }
+a { color: inherit; }
+button { font-family: inherit; cursor: pointer; }
+input, select, textarea { font-family: inherit; }
+
+:focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+.container { max-width: var(--container); margin: 0 auto; padding: 0 24px; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 12px 22px; border-radius: var(--radius-sm); border: 1px solid transparent;
+  font-size: 15px; font-weight: 600; text-decoration: none;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.btn:active { transform: translateY(1px); }
+.btn-primary { background: var(--ember); color: #FFF9F2; }
+.btn-primary:hover { background: #A2661F; }
+.btn-dark { background: var(--ink); color: var(--paper); }
+.btn-dark:hover { background: #23342C; }
+.btn-outline { background: transparent; color: var(--ink); border-color: var(--ink); }
+.btn-outline:hover { background: var(--ink); color: var(--paper); }
+.btn-ghost { background: transparent; color: var(--ink); border: none; padding: 8px 4px; }
+.btn-sm { padding: 8px 14px; font-size: 13px; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.card { background: var(--paper-raised); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 24px; }
+
+.badge { display: inline-block; padding: 3px 10px; border-radius: 100px; font-size: 12px; font-weight: 600; letter-spacing: 0.2px; }
+.badge-active { background: var(--forest-dim); color: var(--forest); }
+.badge-pending { background: var(--ember-dim); color: var(--ember); }
+.badge-rejected { background: #F1DAD5; color: var(--danger); }
+
+.field { margin-bottom: 16px; }
+.field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--ink); }
+.field input, .field select, .field textarea {
+  width: 100%; padding: 11px 13px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  font-size: 15px; background: var(--paper-raised); color: var(--ink);
+}
+.field input:focus, .field select:focus, .field textarea:focus { border-color: var(--ember); }
+.field .hint { font-size: 12px; color: #6B6F63; margin-top: 4px; }
+
+.error-text { color: var(--danger); font-size: 13px; margin-top: 8px; }
+.success-text { color: var(--success); font-size: 13px; margin-top: 8px; }
+
+.table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table th { text-align: left; font-size: 12px; color: #6B6F63; font-weight: 600; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.table td { padding: 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.table tr:hover td { background: rgba(0,0,0,0.015); }

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coach console — FastCoach</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/tokens.css">
+<link rel="stylesheet" href="../css/dashboard.css">
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">FastCoach</div>
+    <div class="role-tag">Coach console</div>
+    <nav>
+      <a href="#roster" class="nav-link active" data-view="roster">Client roster</a>
+      <a href="#payments" class="nav-link" data-view="payments">Payment approvals</a>
+      <a href="#leaderboard" class="nav-link" data-view="leaderboard">Leaderboard</a>
+      <a href="#payouts" class="nav-link" data-view="payouts">Referral payouts</a>
+    </nav>
+    <button class="logout-btn" onclick="logout()">Sign out</button>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <h1 id="page-title">Client roster</h1>
+      <div id="user-chip" style="font-size:13.5px; color:#6B6F63;"></div>
+    </div>
+
+    <div class="content">
+
+      <!-- ROSTER -->
+      <section id="view-roster">
+        <div class="card">
+          <table class="table">
+            <thead><tr><th>Client</th><th>Day</th><th>Status</th><th>Fasting state</th><th>Water</th><th>Adherence</th><th>Points</th><th></th></tr></thead>
+            <tbody id="roster-body"><tr><td colspan="8" style="color:#6B6F63;">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- PAYMENTS -->
+      <section id="view-payments" style="display:none;">
+        <div class="tabs-row">
+          <button class="pay-tab active" data-status="pending">Pending</button>
+          <button class="pay-tab" data-status="approved">Approved</button>
+          <button class="pay-tab" data-status="rejected">Rejected</button>
+        </div>
+        <div class="card">
+          <table class="table">
+            <thead><tr><th>Client</th><th>Tier</th><th>Amount</th><th>UTR</th><th>Submitted</th><th></th></tr></thead>
+            <tbody id="payments-body"><tr><td colspan="6" style="color:#6B6F63;">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- LEADERBOARD -->
+      <section id="view-leaderboard" style="display:none;">
+        <div class="card" id="leaderboard-list"><p class="hint">Loading…</p></div>
+      </section>
+
+      <!-- PAYOUTS -->
+      <section id="view-payouts" style="display:none;">
+        <div class="tabs-row">
+          <button class="payout-tab active" data-status="pending">Pending</button>
+          <button class="payout-tab" data-status="paid">Paid</button>
+          <button class="payout-tab" data-status="rejected">Rejected</button>
+        </div>
+        <div class="card">
+          <table class="table">
+            <thead><tr><th>Client</th><th>Amount</th><th>UPI ID</th><th>Requested</th><th></th></tr></thead>
+            <tbody id="payouts-body"><tr><td colspan="5" style="color:#6B6F63;">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<!-- Regimen builder modal -->
+<div class="modal-backdrop" id="regimen-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Assign today's plan — <span id="regimen-client-name"></span></h3>
+      <button class="modal-close" onclick="closeRegimenModal()">&times;</button>
+    </div>
+    <input type="hidden" id="regimen-client-id">
+    <div class="field">
+      <label for="regimen-day">Challenge day</label>
+      <input type="number" id="regimen-day" min="1" max="55">
+    </div>
+    <div style="display:flex; gap:12px;">
+      <div class="field" style="flex:1;">
+        <label for="regimen-start">Eating window start (24h, e.g. 13)</label>
+        <input type="number" id="regimen-start" min="0" max="24" step="0.25">
+      </div>
+      <div class="field" style="flex:1;">
+        <label for="regimen-end">Eating window end (24h, e.g. 21)</label>
+        <input type="number" id="regimen-end" min="0" max="24" step="0.25">
+      </div>
+    </div>
+    <div class="field">
+      <label for="regimen-water">Water target (ml)</label>
+      <input type="number" id="regimen-water" value="3000">
+    </div>
+
+    <div class="section-title">Meals</div>
+    <div id="meal-rows"></div>
+    <button class="btn btn-outline btn-sm" onclick="addMealRow()">+ Add meal</button>
+
+    <div class="section-title">Habit milestones</div>
+    <div id="milestone-rows"></div>
+    <button class="btn btn-outline btn-sm" onclick="addMilestoneRow()">+ Add milestone</button>
+
+    <div style="margin-top:24px; display:flex; gap:10px;">
+      <button class="btn btn-primary" onclick="saveRegimen()">Save plan</button>
+      <button class="btn btn-outline" onclick="closeRegimenModal()">Cancel</button>
+    </div>
+    <p class="error-text" id="regimen-error" style="display:none;"></p>
+  </div>
+</div>
+
+<script src="../js/config.js"></script>
+<script src="../js/api.js"></script>
+<script src="../js/admin.js"></script>
+</body>
+</html>
