@@ -1,0 +1,32 @@
+FastCoach update — which files changed
+======================================
+
+NEW
+  backend/models/ProtocolDay.js        55-day master protocol (coach-editable)
+  backend/utils/protocolData.js        the protocol itself, transcribed from your doc
+  backend/utils/seedProtocol.js        npm run seed:protocol
+
+CHANGED
+  backend/models/User.js               heightCm, fastingPause, pausedDays, weightLog ids, bmi()
+  backend/models/ChecklistLog.js       custom items, waterEntries, recalc helpers
+  backend/models/Regimen.js            isFullDayFast, protocolType, phase, focus
+  backend/routes/client.js             checklist/water/weight CRUD, BMI profile, pause/resume, chart data
+  backend/routes/admin.js              protocol CRUD, apply-protocol, pause override
+  backend/utils/helpers.js             pause-aware + full-fast-aware fasting state
+  backend/package.json                 added seed:protocol script
+  frontend/client/dashboard.html       sidebar, chart, editable checklist/water, BMI, pause
+  frontend/admin/dashboard.html        protocol tab + day editor + apply modals
+  frontend/js/client.js                all client dashboard logic
+  frontend/js/admin.js                 all coach console logic
+  frontend/css/dashboard.css           sidebar, chart, entry rows, BMI, notices
+  README.md                            changelog + new endpoints
+
+UNCHANGED (included so you can drop the folder in as-is)
+  backend/server.js, routes/auth.js, middleware/auth.js, config/db.js,
+  models/Payment.js, models/Payout.js, utils/seedAdmin.js, utils/checkPasswordHashes.js,
+  frontend/index.html, frontend/js/api.js, frontend/js/config.js,
+  frontend/css/tokens.css, frontend/css/landing.css, render.yaml, .gitignore
+
+AFTER DEPLOYING
+  1. cd backend && npm run seed:protocol      (or Admin console -> 55-day protocol -> Load defaults)
+  2. Hard-refresh the frontend so the new CSS/JS load.

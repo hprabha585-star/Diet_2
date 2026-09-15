@@ -11,36 +11,74 @@
 </head>
 <body>
 <div class="app-shell">
-  <aside class="sidebar">
-    <div class="brand">FastCoach</div>
-    <div class="role-tag">Coach console</div>
+
+  <div class="sidebar-scrim" id="sidebar-scrim" onclick="closeSidebar()"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-top">
+      <div class="brand">FastCoach</div>
+      <div class="role-tag">Coach console</div>
+    </div>
     <nav>
-      <a href="#roster" class="nav-link active" data-view="roster">Client roster</a>
-      <a href="#payments" class="nav-link" data-view="payments">Payment approvals</a>
-      <a href="#leaderboard" class="nav-link" data-view="leaderboard">Leaderboard</a>
-      <a href="#payouts" class="nav-link" data-view="payouts">Referral payouts</a>
+      <a href="#roster" class="nav-link active" data-view="roster"><span class="ico">☷</span><span>Client roster</span></a>
+      <a href="#protocol" class="nav-link" data-view="protocol"><span class="ico">☰</span><span>55-day protocol</span></a>
+      <a href="#payments" class="nav-link" data-view="payments"><span class="ico">₹</span><span>Payment approvals</span></a>
+      <a href="#leaderboard" class="nav-link" data-view="leaderboard"><span class="ico">★</span><span>Leaderboard</span></a>
+      <a href="#payouts" class="nav-link" data-view="payouts"><span class="ico">↗</span><span>Referral payouts</span></a>
     </nav>
-    <button class="logout-btn" onclick="logout()">Sign out</button>
+    <div class="sidebar-foot">
+      <button class="logout-btn" onclick="logout()">Sign out</button>
+    </div>
   </aside>
 
   <main class="main">
     <div class="topbar">
+      <button class="hamburger" onclick="openSidebar()" aria-label="Open menu">☰</button>
       <h1 id="page-title">Client roster</h1>
-      <div id="user-chip" style="font-size:13.5px; color:#6B6F63;"></div>
+      <div id="user-chip" class="user-chip"></div>
     </div>
 
     <div class="content">
 
       <!-- ROSTER -->
       <section id="view-roster">
-        <div style="display:flex; justify-content:flex-end; margin-bottom:16px;">
+        <div class="row-between" style="margin-bottom:16px;">
+          <span class="hint">Live cohort status. "Apply protocol day" copies the master plan onto a client.</span>
           <button class="btn btn-primary btn-sm" onclick="openAddClientModal()">+ Add client</button>
         </div>
-        <div class="card">
+        <div class="card table-scroll">
           <table class="table">
-            <thead><tr><th>Client</th><th>Day</th><th>Status</th><th>Fasting state</th><th>Water</th><th>Adherence</th><th>Points</th><th></th></tr></thead>
-            <tbody id="roster-body"><tr><td colspan="8" style="color:#6B6F63;">Loading…</td></tr></tbody>
+            <thead><tr><th>Client</th><th>Day</th><th>Status</th><th>Fasting state</th><th>Water</th><th>Adherence</th><th>BMI</th><th></th></tr></thead>
+            <tbody id="roster-body"><tr><td colspan="8" class="muted">Loading…</td></tr></tbody>
           </table>
+        </div>
+      </section>
+
+      <!-- 55-DAY PROTOCOL -->
+      <section id="view-protocol" style="display:none;">
+        <div class="card notice" style="margin-bottom:20px;">
+          <div>
+            <strong>55-Day Step-by-Step Fasting Protocol</strong>
+            <p class="hint" style="margin-top:6px;">
+              Six phases, from a 12-hour baseline to 48-hour extended fasts and a 16/8 exit.
+              Edit any day here — changes apply the next time you push that day to a client.
+            </p>
+          </div>
+          <div class="nowrap">
+            <button class="btn btn-outline btn-sm" onclick="seedProtocol(false)">Load defaults</button>
+            <button class="btn btn-ghost btn-sm" onclick="seedProtocol(true)">Reset to defaults</button>
+          </div>
+        </div>
+
+        <div class="tabs-row" id="phase-tabs"></div>
+        <div class="card table-scroll">
+          <table class="table">
+            <thead><tr><th>Day</th><th>Type</th><th>Eating window</th><th>Eat / Fast</th><th>Focus &amp; guidelines</th><th>Water</th><th></th></tr></thead>
+            <tbody id="protocol-body"><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="card" style="margin-top:20px;">
+          <strong>Safety protocol</strong>
+          <ul class="safety-list" id="safety-list"></ul>
         </div>
       </section>
 
@@ -51,10 +89,10 @@
           <button class="pay-tab" data-status="approved">Approved</button>
           <button class="pay-tab" data-status="rejected">Rejected</button>
         </div>
-        <div class="card">
+        <div class="card table-scroll">
           <table class="table">
             <thead><tr><th>Client</th><th>Tier</th><th>Amount</th><th>UTR</th><th>Submitted</th><th></th></tr></thead>
-            <tbody id="payments-body"><tr><td colspan="6" style="color:#6B6F63;">Loading…</td></tr></tbody>
+            <tbody id="payments-body"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
           </table>
         </div>
       </section>
@@ -71,16 +109,97 @@
           <button class="payout-tab" data-status="paid">Paid</button>
           <button class="payout-tab" data-status="rejected">Rejected</button>
         </div>
-        <div class="card">
+        <div class="card table-scroll">
           <table class="table">
             <thead><tr><th>Client</th><th>Amount</th><th>UPI ID</th><th>Requested</th><th></th></tr></thead>
-            <tbody id="payouts-body"><tr><td colspan="5" style="color:#6B6F63;">Loading…</td></tr></tbody>
+            <tbody id="payouts-body"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
           </table>
         </div>
       </section>
 
     </div>
   </main>
+</div>
+
+<!-- Protocol day editor -->
+<div class="modal-backdrop" id="protocol-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Edit protocol — <span id="pd-day-title"></span></h3>
+      <button class="modal-close" onclick="closeProtocolModal()">&times;</button>
+    </div>
+    <input type="hidden" id="pd-day">
+    <div class="field">
+      <label for="pd-phase">Phase</label>
+      <input type="text" id="pd-phase">
+    </div>
+    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+      <div class="field" style="flex:1; min-width:180px;">
+        <label for="pd-type">Protocol type</label>
+        <select id="pd-type">
+          <option value="eating_window">Eating window</option>
+          <option value="refeed">Refeed day</option>
+          <option value="fast_24">24-hour fast</option>
+          <option value="fast_36">36-hour fast</option>
+          <option value="fast_48">48-hour fast</option>
+          <option value="break_fast">Breaking an extended fast</option>
+          <option value="stabilization">Stabilization / exit</option>
+        </select>
+      </div>
+      <div class="field" style="flex:1; min-width:180px;">
+        <label for="pd-label">Short label</label>
+        <input type="text" id="pd-label" placeholder="e.g. 16/8 stability day">
+      </div>
+    </div>
+    <div class="field checkbox-field">
+      <input type="checkbox" id="pd-fullfast" onchange="toggleFullFast()">
+      <label for="pd-fullfast">Full-day fast (no eating window at all)</label>
+    </div>
+    <div style="display:flex; gap:12px;" id="pd-window-fields">
+      <div class="field" style="flex:1;">
+        <label for="pd-start">Eating window start (24h)</label>
+        <input type="number" id="pd-start" min="0" max="24" step="0.25">
+      </div>
+      <div class="field" style="flex:1;">
+        <label for="pd-end">Eating window end (24h)</label>
+        <input type="number" id="pd-end" min="0" max="24" step="0.25">
+      </div>
+    </div>
+    <div class="field">
+      <label for="pd-focus">Focus &amp; guidelines</label>
+      <textarea id="pd-focus" rows="3"></textarea>
+    </div>
+    <div class="field">
+      <label for="pd-water">Water target (ml)</label>
+      <input type="number" id="pd-water" step="100">
+    </div>
+    <div style="margin-top:20px; display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="btn btn-primary" onclick="saveProtocolDay()">Save day</button>
+      <button class="btn btn-outline" onclick="applyDayToCohort()">Save &amp; push to all active clients</button>
+      <button class="btn btn-ghost" onclick="closeProtocolModal()">Cancel</button>
+    </div>
+    <p class="error-text" id="pd-error" style="display:none;"></p>
+    <p class="success-text" id="pd-success" style="display:none;"></p>
+  </div>
+</div>
+
+<!-- Apply protocol day to one client -->
+<div class="modal-backdrop" id="apply-modal">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-head">
+      <h3>Apply protocol — <span id="apply-client-name"></span></h3>
+      <button class="modal-close" onclick="closeApplyModal()">&times;</button>
+    </div>
+    <input type="hidden" id="apply-client-id">
+    <div class="field">
+      <label for="apply-day">Protocol day to apply</label>
+      <input type="number" id="apply-day" min="1" max="55">
+      <p class="hint">Copies that day's window, focus and water target onto this client. You can still fine-tune meals with "Assign plan".</p>
+    </div>
+    <button class="btn btn-primary" style="width:100%;" onclick="submitApplyProtocol()">Apply to client</button>
+    <p class="error-text" id="apply-error" style="display:none;"></p>
+    <p class="success-text" id="apply-success" style="display:none;"></p>
+  </div>
 </div>
 
 <!-- Regimen builder modal -->
@@ -95,6 +214,10 @@
       <label for="regimen-day">Challenge day</label>
       <input type="number" id="regimen-day" min="1" max="55">
     </div>
+    <div class="field checkbox-field">
+      <input type="checkbox" id="regimen-fullfast">
+      <label for="regimen-fullfast">Full-day fast (24h / 36h / 48h)</label>
+    </div>
     <div style="display:flex; gap:12px;">
       <div class="field" style="flex:1;">
         <label for="regimen-start">Eating window start (24h, e.g. 13)</label>
@@ -108,6 +231,10 @@
     <div class="field">
       <label for="regimen-water">Water target (ml)</label>
       <input type="number" id="regimen-water" value="3000">
+    </div>
+    <div class="field">
+      <label for="regimen-focus">Focus note for the client</label>
+      <input type="text" id="regimen-focus" placeholder="e.g. Break the fast gently with warm water + ghee">
     </div>
 
     <div class="section-title">Meals</div>
@@ -161,9 +288,9 @@
         <option value="vip">VIP / Clinical</option>
       </select>
     </div>
-    <div class="field" style="display:flex; align-items:center; gap:8px;">
-      <input type="checkbox" id="ac-activate" style="width:auto;">
-      <label for="ac-activate" style="margin:0;">Activate immediately (skip payment approval)</label>
+    <div class="field checkbox-field">
+      <input type="checkbox" id="ac-activate">
+      <label for="ac-activate">Activate immediately (skip payment approval)</label>
     </div>
     <button class="btn btn-primary" style="width:100%;" onclick="submitAddClient()">Create client</button>
     <p class="error-text" id="ac-error" style="display:none;"></p>

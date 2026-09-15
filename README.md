@@ -142,3 +142,71 @@ to switch tabs rather than a confusing "invalid credentials" error.
 - Streak/points logic awards +100 points and +1 streak the first time a day's
   checklist completion crosses 80% — tune the threshold in
   `backend/routes/client.js`.
+
+---
+
+## What's new in this update
+
+### Client dashboard
+- **Sidebar navigation** — collapsible on mobile (hamburger in the top bar), with a
+  new **55-day protocol** page and the current challenge day pinned at the bottom.
+- **Points card replaced by a bar chart** — the "Today" page now shows a 14-day
+  adherence chart directly above the checklist, with a toggle to view water
+  intake instead. Points still accrue in the background and drive the leaderboard.
+- **Editable checklist** — every item has Edit and Delete, and clients can add
+  their own habits with **+ Add habit**. Coach-assigned items and client-added
+  items are distinguished in the UI.
+- **Editable water log** — each tap is stored as its own entry with a timestamp;
+  entries can be edited or deleted, and a custom amount can be logged.
+- **BMI calculator** on History & weight — height and goal weight are saved to the
+  profile (visible to the coach), and each weight entry can be edited or deleted.
+- **Pause fasting** — for illness, dizziness, medical advice, medication or travel.
+  While paused the challenge day is frozen, the streak is protected, and the coach
+  sees the reason on the roster. Resume from the banner or the fasting card.
+
+### Coach console
+- **55-day protocol tab** — the full step-by-step protocol (six phases, from a
+  12-hour baseline through 24h/36h/48h fasts to a 16/8 exit), filterable by phase.
+  Every day is editable: type, eating window, full-day-fast flag, focus notes and
+  water target. "Reset to defaults" restores the original document.
+- **Apply protocol day** — push a protocol day onto one client, or onto every
+  active client at once from the day editor.
+- **Pause / resume** a client's fasting from the roster, and see BMI per client.
+
+### New backend endpoints
+
+| Method | Route | Who | Purpose |
+|---|---|---|---|
+| POST | `/client/checklist/items` | client | Add a custom habit |
+| PATCH | `/client/checklist/items/:key` | client | Rename or tick an item |
+| DELETE | `/client/checklist/items/:key` | client | Remove an item |
+| POST | `/client/water` | client | Log a water entry |
+| PATCH | `/client/water/:entryId` | client | Edit a water entry |
+| DELETE | `/client/water/:entryId` | client | Delete a water entry |
+| PATCH | `/client/weight/:logId` | client | Edit a weight entry |
+| DELETE | `/client/weight/:logId` | client | Delete a weight entry |
+| POST | `/client/profile` | client | Save height / goal weight (BMI) |
+| POST | `/client/fasting/pause` | client | Pause fasting with a reason |
+| POST | `/client/fasting/resume` | client | Resume and unfreeze the clock |
+| GET | `/client/protocol` | client | Read-only 55-day protocol |
+| GET | `/admin/protocol` | admin | Full protocol |
+| POST | `/admin/protocol/seed` | admin | Load / reset defaults |
+| PUT | `/admin/protocol/:day` | admin | Edit one protocol day |
+| DELETE | `/admin/protocol/:day` | admin | Remove a protocol day |
+| POST | `/admin/protocol/apply-all` | admin | Push a day to all active clients |
+| POST | `/admin/clients/:id/apply-protocol` | admin | Push a day to one client |
+| POST | `/admin/clients/:id/pause` | admin | Pause / resume on a client's behalf |
+
+### One extra setup step
+
+After deploying, load the protocol into MongoDB once — either from the admin
+console (**55-day protocol → Load defaults**) or from a shell:
+
+```bash
+cd backend
+npm run seed:protocol          # insert missing days only
+npm run seed:protocol -- --force   # overwrite coach edits with the defaults
+```
+
+Existing clients keep their data. Weight entries logged before this update can't
+be edited (they were stored without an id) — new entries can.

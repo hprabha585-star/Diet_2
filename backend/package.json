@@ -1,12 +1,13 @@
 {
   "name": "fastcoach-backend",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "FastCoach - coach-led fasting & diet cohort management API",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
     "seed:admin": "node utils/seedAdmin.js",
+    "seed:protocol": "node utils/seedProtocol.js",
     "check:passwords": "node utils/checkPasswordHashes.js"
   },
   "dependencies": {

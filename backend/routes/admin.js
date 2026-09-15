@@ -5,15 +5,17 @@ const Payment = require('../models/Payment');
 const Regimen = require('../models/Regimen');
 const ChecklistLog = require('../models/ChecklistLog');
 const Payout = require('../models/Payout');
+const ProtocolDay = require('../models/ProtocolDay');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { computeFastingState, generateReferralCode } = require('../utils/helpers');
+const { PROTOCOL_DAYS, SAFETY_NOTES } = require('../utils/protocolData');
 
 const router = express.Router();
 router.use(requireAuth, requireRole('admin'));
 
-// POST /api/admin/clients — coach creates a client account directly.
-// Always goes through bcrypt here, so credentials are guaranteed to work at
-// login. Use this instead of adding documents to MongoDB by hand.
+/* ------------------------------------------------------------------ */
+/* Clients                                                             */
+/* ------------------------------------------------------------------ */
 router.post('/clients', async (req, res) => {
   try {
     const { name, email, phone, password, tier, activateNow } = req.body;
@@ -45,8 +47,6 @@ router.post('/clients', async (req, res) => {
   }
 });
 
-// POST /api/admin/clients/:id/reset-password — set a fresh, correctly
-// hashed password for a client (e.g. if they're locked out).
 router.post('/clients/:id/reset-password', async (req, res) => {
   try {
     const { newPassword } = req.body;
@@ -64,7 +64,6 @@ router.post('/clients/:id/reset-password', async (req, res) => {
   }
 });
 
-// GET /api/admin/clients — full roster with live status
 router.get('/clients', async (req, res) => {
   const clients = await User.find({ role: 'client' }).sort({ createdAt: -1 });
 
@@ -74,13 +73,19 @@ router.get('/clients', async (req, res) => {
       Regimen.findOne({ user: c._id, day }),
       ChecklistLog.findOne({ user: c._id, day })
     ]);
+    const paused = !!(c.fastingPause && c.fastingPause.active);
     return {
       _id: c._id, name: c.name, email: c.email, phone: c.phone,
       tier: c.tier, status: c.status, day, challengeLengthDays: c.challengeLengthDays,
       points: c.points, streakCurrent: c.streakCurrent,
       waterMl: checklist ? checklist.waterMl : 0,
       completionPercent: checklist ? checklist.completionPercent : 0,
-      fastingState: regimen ? computeFastingState(regimen.fastingWindow) : null,
+      fastingState: regimen ? computeFastingState(regimen, { paused, reason: paused ? c.fastingPause.reason : '' }) : null,
+      paused,
+      pauseReason: paused ? c.fastingPause.reason : '',
+      pausedDays: c.pausedDays || 0,
+      heightCm: c.heightCm,
+      bmi: c.bmi(),
       hasRegimenToday: !!regimen
     };
   }));
@@ -88,7 +93,6 @@ router.get('/clients', async (req, res) => {
   res.json({ clients: enriched });
 });
 
-// GET /api/admin/clients/:id — single client detail
 router.get('/clients/:id', async (req, res) => {
   const client = await User.findById(req.params.id);
   if (!client || client.role !== 'client') return res.status(404).json({ error: 'Client not found' });
@@ -97,7 +101,6 @@ router.get('/clients/:id', async (req, res) => {
   res.json({ client: client.toSafeJSON(), regimens, checklists });
 });
 
-// POST /api/admin/clients/:id/activate — manually activate without payment (optional coach override)
 router.post('/clients/:id/activate', async (req, res) => {
   const client = await User.findById(req.params.id);
   if (!client) return res.status(404).json({ error: 'Client not found' });
@@ -107,15 +110,52 @@ router.post('/clients/:id/activate', async (req, res) => {
   res.json({ client: client.toSafeJSON() });
 });
 
-// POST /api/admin/clients/:id/regimen — assign/update a day's plan
+// POST /api/admin/clients/:id/pause — coach can pause or resume on a client's behalf
+router.post('/clients/:id/pause', async (req, res) => {
+  try {
+    const client = await User.findById(req.params.id);
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+    const active = !!req.body.active;
+
+    if (active) {
+      client.fastingPause = {
+        active: true,
+        reason: (req.body.reason || 'Paused by coach').trim(),
+        startedAt: new Date(),
+        lastResumedAt: client.fastingPause?.lastResumedAt
+      };
+    } else if (client.fastingPause && client.fastingPause.active) {
+      const elapsed = Math.floor((Date.now() - new Date(client.fastingPause.startedAt).getTime()) / 86400000);
+      client.pausedDays = (client.pausedDays || 0) + Math.max(0, elapsed);
+      client.fastingPause = {
+        active: false,
+        reason: client.fastingPause.reason,
+        startedAt: client.fastingPause.startedAt,
+        lastResumedAt: new Date()
+      };
+    }
+    await client.save();
+    res.json({ fastingPause: client.fastingPause, pausedDays: client.pausedDays });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not update pause state', detail: err.message });
+  }
+});
+
 router.post('/clients/:id/regimen', async (req, res) => {
   try {
-    const { day, fastingWindow, meals, milestones, waterTargetMl } = req.body;
+    const { day, fastingWindow, meals, milestones, waterTargetMl, isFullDayFast, protocolType, phase, focus } = req.body;
     if (!day || !fastingWindow) return res.status(400).json({ error: 'day and fastingWindow are required' });
 
     const regimen = await Regimen.findOneAndUpdate(
       { user: req.params.id, day },
-      { user: req.params.id, day, fastingWindow, meals: meals || [], milestones: milestones || [], waterTargetMl: waterTargetMl || 3000 },
+      {
+        user: req.params.id, day, fastingWindow,
+        meals: meals || [], milestones: milestones || [],
+        waterTargetMl: waterTargetMl || 3000,
+        isFullDayFast: !!isFullDayFast,
+        protocolType: protocolType || 'eating_window',
+        phase: phase || '', focus: focus || ''
+      },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
     res.json({ regimen });
@@ -124,14 +164,159 @@ router.post('/clients/:id/regimen', async (req, res) => {
   }
 });
 
-// GET /api/admin/payments — pending queue (default) or all
+/* ------------------------------------------------------------------ */
+/* 55-day master protocol                                              */
+/* ------------------------------------------------------------------ */
+
+// GET /api/admin/protocol
+router.get('/protocol', async (req, res) => {
+  const days = await ProtocolDay.find({}).sort({ day: 1 });
+  res.json({ days, safetyNotes: SAFETY_NOTES, seeded: days.length > 0 });
+});
+
+// POST /api/admin/protocol/seed  { force: true } to reset coach edits
+router.post('/protocol/seed', async (req, res) => {
+  try {
+    const force = !!req.body.force;
+    let inserted = 0, updated = 0;
+    for (const d of PROTOCOL_DAYS) {
+      const existing = await ProtocolDay.findOne({ day: d.day });
+      if (!existing) { await ProtocolDay.create({ ...d, updatedAt: new Date() }); inserted++; }
+      else if (force) { await ProtocolDay.updateOne({ day: d.day }, { ...d, updatedAt: new Date() }); updated++; }
+    }
+    const days = await ProtocolDay.find({}).sort({ day: 1 });
+    res.json({ inserted, updated, days });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not seed protocol', detail: err.message });
+  }
+});
+
+// PUT /api/admin/protocol/:day — edit any day of the protocol
+router.put('/protocol/:day', async (req, res) => {
+  try {
+    const day = parseInt(req.params.day, 10);
+    if (!day || day < 1) return res.status(400).json({ error: 'Invalid day' });
+
+    const { phase, protocolType, label, startHour, endHour, isFullDayFast, focus, waterTargetMl } = req.body;
+    const fullFast = !!isFullDayFast;
+    const start = Number(startHour);
+    const end = Number(endHour);
+    if (!fullFast && (isNaN(start) || isNaN(end))) {
+      return res.status(400).json({ error: 'Eating window start and end are required' });
+    }
+    const eatingHours = fullFast ? 0 : Math.round(((end - start + 24) % 24) * 10) / 10;
+
+    const updated = await ProtocolDay.findOneAndUpdate(
+      { day },
+      {
+        day,
+        phase: phase || 'Custom',
+        protocolType: protocolType || 'eating_window',
+        label: label || '',
+        startHour: fullFast ? 9 : start,
+        endHour: fullFast ? 9 : end,
+        isFullDayFast: fullFast,
+        eatingHours,
+        fastingHours: Math.round((24 - eatingHours) * 10) / 10,
+        focus: focus || '',
+        waterTargetMl: waterTargetMl || 3000,
+        updatedAt: new Date()
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    res.json({ day: updated });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not update protocol day', detail: err.message });
+  }
+});
+
+// DELETE /api/admin/protocol/:day
+router.delete('/protocol/:day', async (req, res) => {
+  try {
+    await ProtocolDay.deleteOne({ day: parseInt(req.params.day, 10) });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not delete protocol day', detail: err.message });
+  }
+});
+
+// POST /api/admin/clients/:id/apply-protocol { day, meals, milestones }
+// Copies a protocol day onto a client as their regimen for that day.
+router.post('/clients/:id/apply-protocol', async (req, res) => {
+  try {
+    const day = parseInt(req.body.day, 10);
+    if (!day) return res.status(400).json({ error: 'day is required' });
+
+    const template = await ProtocolDay.findOne({ day });
+    if (!template) return res.status(404).json({ error: `Day ${day} is not in the protocol yet — seed it first` });
+
+    const client = await User.findById(req.params.id);
+    if (!client || client.role !== 'client') return res.status(404).json({ error: 'Client not found' });
+
+    const milestones = [
+      { key: 'water_target', label: `Hit ${template.waterTargetMl} ml of water` },
+      { key: 'protocol_focus', label: template.focus || template.label || 'Follow today\'s protocol' }
+    ];
+
+    const regimen = await Regimen.findOneAndUpdate(
+      { user: client._id, day },
+      {
+        user: client._id, day,
+        fastingWindow: { startHour: template.startHour, endHour: template.endHour },
+        isFullDayFast: template.isFullDayFast,
+        protocolType: template.protocolType,
+        phase: template.phase,
+        focus: template.focus,
+        meals: req.body.meals || [],
+        milestones: req.body.milestones || milestones,
+        waterTargetMl: template.waterTargetMl
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    res.json({ regimen });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not apply protocol', detail: err.message });
+  }
+});
+
+// POST /api/admin/protocol/apply-all { day } — push one protocol day to every active client
+router.post('/protocol/apply-all', async (req, res) => {
+  try {
+    const day = parseInt(req.body.day, 10);
+    const template = await ProtocolDay.findOne({ day });
+    if (!template) return res.status(404).json({ error: 'Protocol day not found' });
+
+    const clients = await User.find({ role: 'client', status: 'active' }).select('_id');
+    for (const c of clients) {
+      await Regimen.findOneAndUpdate(
+        { user: c._id, day },
+        {
+          user: c._id, day,
+          fastingWindow: { startHour: template.startHour, endHour: template.endHour },
+          isFullDayFast: template.isFullDayFast,
+          protocolType: template.protocolType,
+          phase: template.phase,
+          focus: template.focus,
+          waterTargetMl: template.waterTargetMl
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+    }
+    res.json({ applied: clients.length });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not apply protocol to cohort', detail: err.message });
+  }
+});
+
+/* ------------------------------------------------------------------ */
+/* Payments / leaderboard / payouts                                    */
+/* ------------------------------------------------------------------ */
 router.get('/payments', async (req, res) => {
   const filter = req.query.status ? { status: req.query.status } : { status: 'pending' };
   const payments = await Payment.find(filter).populate('user', 'name email phone').sort({ createdAt: -1 });
   res.json({ payments });
 });
 
-// POST /api/admin/payments/:id/approve
 router.post('/payments/:id/approve', async (req, res) => {
   const payment = await Payment.findById(req.params.id);
   if (!payment) return res.status(404).json({ error: 'Payment not found' });
@@ -162,7 +347,6 @@ router.post('/payments/:id/approve', async (req, res) => {
   res.json({ payment, client: client.toSafeJSON() });
 });
 
-// POST /api/admin/payments/:id/reject
 router.post('/payments/:id/reject', async (req, res) => {
   const payment = await Payment.findById(req.params.id);
   if (!payment) return res.status(404).json({ error: 'Payment not found' });
@@ -174,7 +358,6 @@ router.post('/payments/:id/reject', async (req, res) => {
   res.json({ payment });
 });
 
-// GET /api/admin/leaderboard
 router.get('/leaderboard', async (req, res) => {
   const clients = await User.find({ role: 'client', status: 'active' })
     .sort({ points: -1, streakCurrent: -1 })
@@ -182,14 +365,12 @@ router.get('/leaderboard', async (req, res) => {
   res.json({ leaderboard: clients });
 });
 
-// GET /api/admin/payouts
 router.get('/payouts', async (req, res) => {
   const filter = req.query.status ? { status: req.query.status } : { status: 'pending' };
   const payouts = await Payout.find(filter).populate('user', 'name email').sort({ requestedAt: -1 });
   res.json({ payouts });
 });
 
-// POST /api/admin/payouts/:id/approve
 router.post('/payouts/:id/approve', async (req, res) => {
   const payout = await Payout.findById(req.params.id);
   if (!payout) return res.status(404).json({ error: 'Payout not found' });
@@ -206,7 +387,6 @@ router.post('/payouts/:id/approve', async (req, res) => {
   res.json({ payout });
 });
 
-// POST /api/admin/payouts/:id/reject
 router.post('/payouts/:id/reject', async (req, res) => {
   const payout = await Payout.findById(req.params.id);
   if (!payout) return res.status(404).json({ error: 'Payout not found' });

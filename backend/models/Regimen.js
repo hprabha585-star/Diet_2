@@ -21,6 +21,15 @@ const regimenSchema = new mongoose.Schema({
     startHour: { type: Number, required: true }, // eating window start, 0-23.99
     endHour: { type: Number, required: true }    // eating window end, 0-23.99
   },
+  // Set for 24h / 36h / 48h protocol days — there is no eating window at all.
+  isFullDayFast: { type: Boolean, default: false },
+  protocolType: {
+    type: String,
+    enum: ['eating_window', 'refeed', 'fast_24', 'fast_36', 'fast_48', 'break_fast', 'stabilization'],
+    default: 'eating_window'
+  },
+  phase: { type: String },
+  focus: { type: String },
   meals: [mealSchema],
   milestones: [milestoneSchema],
   waterTargetMl: { type: Number, default: 3000 },
