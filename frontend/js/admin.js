@@ -2,6 +2,9 @@ let currentPayStatus = 'pending';
 let currentPayoutStatus = 'pending';
 let protocolDays = [];
 let protocolPhase = 'all';
+let plansCache = [];
+let currentThread = null;
+let chatPoll = null;
 
 const PROTOCOL_LABELS = {
   eating_window: 'Eating window',
@@ -42,7 +45,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   });
 
+  const chatInput = document.getElementById('chat-input');
+  if (chatInput) {
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAdminMessage(); }
+    });
+  }
+
   await loadRoster();
+  refreshChatBadge();
+  setInterval(refreshChatBadge, 30000);
   const hash = (window.location.hash || '').replace('#', '');
   if (hash && document.getElementById(`view-${hash}`)) showView(hash);
 });
@@ -64,7 +76,7 @@ function showView(view) {
   if (!section || !link) return;
   section.style.display = 'block';
   link.classList.add('active');
-  const labelEl = link.querySelector('span:last-child');
+  const labelEl = link.querySelector('span:nth-child(2)');
   document.getElementById('page-title').textContent = (labelEl ? labelEl.textContent : link.textContent).trim();
   window.location.hash = view;
 
@@ -73,6 +85,15 @@ function showView(view) {
   if (view === 'leaderboard') loadLeaderboard();
   if (view === 'payouts') loadPayouts();
   if (view === 'protocol') loadProtocol();
+  if (view === 'referrals') loadReferrals();
+  if (view === 'plans') loadPlans();
+  if (view === 'alerts') loadAlertsView();
+  if (view === 'settings') loadSettings();
+  if (chatPoll) { clearInterval(chatPoll); chatPoll = null; }
+  if (view === 'chat') {
+    loadThreads();
+    chatPoll = setInterval(() => { loadThreads(true); if (currentThread) loadThread(currentThread, true); }, 15000);
+  }
 }
 
 function esc(s) {
@@ -574,6 +595,288 @@ async function saveRegimen() {
     });
     closeRegimenModal();
     loadRoster();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  }
+}
+
+
+/* ================================================================== */
+/* Referral overview                                                   */
+/* ================================================================== */
+async function loadReferrals() {
+  const tbody = document.getElementById('referrals-body');
+  try {
+    const data = await apiRequest('/admin/referrals');
+    const t = data.totals;
+    document.getElementById('referral-totals').innerHTML = `
+      <div class="card stat-card"><div class="val">${t.clients}</div><div class="lbl">Clients</div></div>
+      <div class="card stat-card"><div class="val">${t.referredClients}</div><div class="lbl">Joined via a referral</div></div>
+      <div class="card stat-card"><div class="val">₹${t.walletOutstanding.toLocaleString('en-IN')}</div><div class="lbl">Wallets outstanding</div></div>
+      <div class="card stat-card"><div class="val">₹${t.paidOut.toLocaleString('en-IN')}</div><div class="lbl">Paid out so far</div></div>`;
+
+    tbody.innerHTML = data.referrals.map(r => `
+      <tr>
+        <td><strong>${esc(r.name)}</strong><br><span class="muted small">${esc(r.email)}</span></td>
+        <td><code class="code-chip">${esc(r.referralCode)}</code></td>
+        <td>${r.referredByName ? esc(r.referredByName) : '<span class="muted">—</span>'}</td>
+        <td>${r.referredCount}${r.referredCount ? `<br><span class="muted small">${esc(r.referredNames.join(', '))}</span>` : ''}</td>
+        <td>₹${r.walletBalanceInr}${r.pendingPayouts ? '<br><span class="badge badge-pending">payout pending</span>' : ''}</td>
+        <td>₹${r.paidOutInr}</td>
+        <td class="nowrap"><button class="btn btn-ghost btn-sm" onclick="adjustWallet('${r._id}','${jsStr(r.name)}')">Adjust wallet</button></td>
+      </tr>
+    `).join('') || '<tr><td colspan="7" class="muted">No clients yet.</td></tr>';
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="7" class="error-text">${esc(err.message)}</td></tr>`;
+  }
+}
+
+async function adjustWallet(id, name) {
+  const raw = prompt(`Adjust ${name}'s wallet by how much? Use a negative number to deduct.`, '500');
+  if (raw === null) return;
+  const amountInr = Number(raw);
+  if (!amountInr) return;
+  try {
+    await apiRequest(`/admin/referrals/${id}/adjust`, { method: 'POST', body: { amountInr } });
+    loadReferrals();
+  } catch (err) { alert(err.message); }
+}
+
+/* ================================================================== */
+/* Plans                                                               */
+/* ================================================================== */
+async function loadPlans() {
+  const wrap = document.getElementById('plans-list');
+  try {
+    const data = await apiRequest('/admin/plans');
+    plansCache = data.plans;
+    wrap.innerHTML = plansCache.map(p => `
+      <div class="card plan-card ${p.active ? '' : 'inactive'}">
+        <div class="plan-name">${esc(p.name)} ${p.active ? '' : '<span class="badge badge-pending">hidden</span>'}</div>
+        <div class="plan-price">₹${p.priceInr.toLocaleString('en-IN')}<span> / ${p.durationDays} days</span></div>
+        ${p.tagline ? `<p class="hint">${esc(p.tagline)}</p>` : ''}
+        <ul class="plan-features">${(p.features || []).map(f => `<li>${esc(f)}</li>`).join('')}</ul>
+        <div class="row-actions">
+          <button class="btn btn-outline btn-sm" onclick="openPlanModal('${p._id}')">Edit</button>
+          <button class="icon-btn danger" onclick="deletePlan('${p._id}')">Delete</button>
+        </div>
+      </div>
+    `).join('') || '<p class="hint">No plans yet.</p>';
+  } catch (err) {
+    wrap.innerHTML = `<p class="error-text">${esc(err.message)}</p>`;
+  }
+}
+
+function openPlanModal(id) {
+  const p = plansCache.find(x => x._id === id);
+  document.getElementById('pl-id').value = id || '';
+  document.getElementById('plan-modal-title').textContent = p ? `Edit ${p.name}` : 'New plan';
+  document.getElementById('pl-name').value = p ? p.name : '';
+  document.getElementById('pl-price').value = p ? p.priceInr : '';
+  document.getElementById('pl-days').value = p ? p.durationDays : 55;
+  document.getElementById('pl-tagline').value = p ? (p.tagline || '') : '';
+  document.getElementById('pl-features').value = p ? (p.features || []).join('\n') : '';
+  document.getElementById('pl-active').checked = p ? p.active : true;
+  document.getElementById('pl-error').style.display = 'none';
+  document.getElementById('plan-modal').classList.add('open');
+}
+function closePlanModal() { document.getElementById('plan-modal').classList.remove('open'); }
+
+async function savePlan() {
+  const errEl = document.getElementById('pl-error');
+  errEl.style.display = 'none';
+  try {
+    const id = document.getElementById('pl-id').value;
+    const body = {
+      name: document.getElementById('pl-name').value.trim(),
+      priceInr: Number(document.getElementById('pl-price').value),
+      durationDays: Number(document.getElementById('pl-days').value) || 55,
+      tagline: document.getElementById('pl-tagline').value.trim(),
+      features: document.getElementById('pl-features').value.split('\n').map(f => f.trim()).filter(Boolean),
+      active: document.getElementById('pl-active').checked
+    };
+    if (!body.name) throw new Error('Give the plan a name');
+    if (!body.priceInr && body.priceInr !== 0) throw new Error('Set a price');
+
+    if (id) await apiRequest(`/admin/plans/${id}`, { method: 'PUT', body });
+    else await apiRequest('/admin/plans', { method: 'POST', body });
+
+    closePlanModal();
+    loadPlans();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  }
+}
+
+async function deletePlan(id) {
+  if (!confirm('Delete this plan? Clients who already paid for it keep their access.')) return;
+  try {
+    await apiRequest(`/admin/plans/${id}`, { method: 'DELETE' });
+    loadPlans();
+  } catch (err) { alert(err.message); }
+}
+
+/* ================================================================== */
+/* Alerts                                                              */
+/* ================================================================== */
+async function loadAlertsView() {
+  try {
+    const [clients, data] = await Promise.all([
+      apiRequest('/admin/clients'),
+      apiRequest('/admin/alerts')
+    ]);
+    const select = document.getElementById('al-client');
+    select.innerHTML = '<option value="all">Everyone in the cohort</option>' +
+      clients.clients.map(c => `<option value="${c._id}">${esc(c.name)} (${esc(c.email)})</option>`).join('');
+
+    document.getElementById('alerts-sent').innerHTML = data.alerts.map(a => `
+      <div class="card alert-card level-${esc(a.level)}">
+        <div class="alert-head">
+          <strong>${esc(a.title)}</strong>
+          <span class="alert-meta">${new Date(a.createdAt).toLocaleString()} · ${a.user ? esc(a.user.name) : 'whole cohort'}</span>
+        </div>
+        <p>${esc(a.body)}</p>
+        <div class="row-actions"><button class="icon-btn danger" onclick="deleteAlert('${a._id}')">Delete</button></div>
+      </div>
+    `).join('') || '<p class="hint">No alerts sent yet.</p>';
+  } catch (err) {
+    document.getElementById('alerts-sent').innerHTML = `<p class="error-text">${esc(err.message)}</p>`;
+  }
+}
+
+async function sendAlert() {
+  const errEl = document.getElementById('al-error');
+  const okEl = document.getElementById('al-success');
+  errEl.style.display = 'none';
+  okEl.style.display = 'none';
+  try {
+    const body = {
+      clientId: document.getElementById('al-client').value,
+      level: document.getElementById('al-level').value,
+      title: document.getElementById('al-title').value.trim(),
+      body: document.getElementById('al-body').value.trim()
+    };
+    if (!body.title || !body.body) throw new Error('Add a title and a message');
+    await apiRequest('/admin/alerts', { method: 'POST', body });
+    document.getElementById('al-title').value = '';
+    document.getElementById('al-body').value = '';
+    okEl.textContent = 'Alert sent — clients see it on their Alerts page.';
+    okEl.style.display = 'block';
+    loadAlertsView();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  }
+}
+
+async function deleteAlert(id) {
+  if (!confirm('Delete this alert?')) return;
+  try {
+    await apiRequest(`/admin/alerts/${id}`, { method: 'DELETE' });
+    loadAlertsView();
+  } catch (err) { alert(err.message); }
+}
+
+/* ================================================================== */
+/* Chat                                                                */
+/* ================================================================== */
+async function refreshChatBadge() {
+  try {
+    const data = await apiRequest('/admin/messages/threads');
+    const el = document.getElementById('badge-chat');
+    if (!el) return;
+    if (data.totalUnread > 0) { el.textContent = data.totalUnread > 9 ? '9+' : data.totalUnread; el.hidden = false; }
+    else el.hidden = true;
+  } catch (err) { /* ignore */ }
+}
+
+async function loadThreads(quiet) {
+  const wrap = document.getElementById('thread-list');
+  try {
+    const data = await apiRequest('/admin/messages/threads');
+    wrap.innerHTML = data.threads.map(t => `
+      <button class="thread ${currentThread === String(t._id) ? 'active' : ''}" onclick="loadThread('${t._id}')">
+        <span class="thread-name">${esc(t.name)}${t.unread ? `<span class="nav-badge">${t.unread}</span>` : ''}</span>
+        <span class="thread-last">${t.lastMessage ? esc(t.lastMessage.slice(0, 48)) : 'No messages yet'}</span>
+      </button>
+    `).join('') || '<p class="hint">No clients yet.</p>';
+    refreshChatBadge();
+  } catch (err) {
+    if (!quiet) wrap.innerHTML = `<p class="error-text">${esc(err.message)}</p>`;
+  }
+}
+
+async function loadThread(clientId, quiet) {
+  currentThread = String(clientId);
+  const log = document.getElementById('chat-log');
+  try {
+    const data = await apiRequest(`/admin/messages/${clientId}`);
+    document.getElementById('chat-head').textContent =
+      data.client ? `${data.client.name} · ${data.client.email}` : 'Conversation';
+    log.innerHTML = data.messages.map(m => `
+      <div class="bubble-row ${m.sender === 'admin' ? 'mine' : 'theirs'}">
+        <div class="bubble">
+          <p>${esc(m.body)}</p>
+          <span class="bubble-time">${new Date(m.createdAt).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+        </div>
+      </div>
+    `).join('') || '<div class="empty-state"><h3>No messages yet</h3><p>Say hello — your client sees it in their app.</p></div>';
+    log.scrollTop = log.scrollHeight;
+    if (!quiet) loadThreads(true);
+  } catch (err) {
+    if (!quiet) log.innerHTML = `<p class="error-text">${esc(err.message)}</p>`;
+  }
+}
+
+async function sendAdminMessage() {
+  const errEl = document.getElementById('chat-error');
+  errEl.style.display = 'none';
+  const input = document.getElementById('chat-input');
+  const body = input.value.trim();
+  if (!body) return;
+  if (!currentThread) {
+    errEl.textContent = 'Pick a client on the left first.';
+    errEl.style.display = 'block';
+    return;
+  }
+  try {
+    await apiRequest(`/admin/messages/${currentThread}`, { method: 'POST', body: { body } });
+    input.value = '';
+    loadThread(currentThread);
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  }
+}
+
+/* ================================================================== */
+/* Contact settings                                                    */
+/* ================================================================== */
+const SETTING_KEYS = ['coachName', 'phone', 'whatsapp', 'email', 'upiId', 'address', 'supportHours', 'note'];
+
+async function loadSettings() {
+  try {
+    const { settings } = await apiRequest('/admin/settings');
+    SETTING_KEYS.forEach(k => {
+      const el = document.getElementById(`st-${k}`);
+      if (el) el.value = settings[k] || '';
+    });
+  } catch (err) { console.error(err); }
+}
+
+async function saveSettings() {
+  const errEl = document.getElementById('st-error');
+  const okEl = document.getElementById('st-success');
+  errEl.style.display = 'none';
+  okEl.style.display = 'none';
+  try {
+    const body = {};
+    SETTING_KEYS.forEach(k => { body[k] = document.getElementById(`st-${k}`).value; });
+    await apiRequest('/admin/settings', { method: 'PUT', body });
+    okEl.textContent = 'Saved — clients see these on their Contact us page.';
+    okEl.style.display = 'block';
   } catch (err) {
     errEl.textContent = err.message;
     errEl.style.display = 'block';

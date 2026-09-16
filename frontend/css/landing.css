@@ -116,3 +116,29 @@ footer .container { display: flex; justify-content: space-between; flex-wrap: wr
   .hero { padding: 56px 0 48px; }
   .section { padding: 56px 0; }
 }
+
+/* ---------- Password show/hide ---------- */
+.pw-wrap { position: relative; display: flex; align-items: center; }
+.pw-wrap input { padding-right: 68px; }
+.pw-toggle {
+  position: absolute; right: 6px; background: transparent; border: none;
+  font-size: 13px; font-weight: 600; color: #55594E; padding: 8px 10px; border-radius: 4px;
+}
+.pw-toggle:hover { color: var(--ember); background: rgba(0,0,0,0.03); }
+
+/* ---------- Mobile polish ---------- */
+@media (max-width: 600px) {
+  .nav .container { height: 62px; }
+  .nav-links { gap: 14px; font-size: 13px; }
+  .hero h1 { font-size: 31px; }
+  .hero p.lede { font-size: 16px; }
+  .hero-ctas .btn { width: 100%; justify-content: center; }
+  .ring-card { padding: 26px; }
+  .ring-wrap { width: 170px; height: 170px; }
+  .ring-wrap svg { width: 170px; height: 170px; }
+  .section-head h2 { font-size: 26px; }
+  .referral-band { padding: 28px; }
+  .plan { padding: 24px; }
+  .field input, .field select, .field textarea { font-size: 16px; }
+  .trust-row { flex-direction: column; gap: 8px; font-size: 13px; }
+}

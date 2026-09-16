@@ -73,9 +73,24 @@ function computeFastingState(regimen, options = {}, now = new Date()) {
 
 // Build the default checklist items for a regimen.
 function buildChecklistItems(regimen) {
+  // Keys must be unique — two "snack" meals or two habits sharing a key
+  // would otherwise tick together.
+  const seen = new Set();
+  const unique = (base) => {
+    let key = base, n = 2;
+    while (seen.has(key)) key = `${base}_${n++}`;
+    seen.add(key);
+    return key;
+  };
   return [
-    ...(regimen.meals || []).map(m => ({ key: `meal_${m.type}`, label: m.name, done: false, custom: false })),
-    ...(regimen.milestones || []).map(m => ({ key: m.key, label: m.label, done: false, custom: false }))
+    ...(regimen.meals || []).map(m => ({
+      key: unique(`meal_${m.type}`),
+      label: m.calories ? `${m.name} (${m.calories} kcal)` : m.name,
+      done: false, custom: false
+    })),
+    ...(regimen.milestones || []).map(m => ({
+      key: unique(`habit_${m.key}`), label: m.label, done: false, custom: false
+    }))
   ];
 }
 

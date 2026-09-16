@@ -16,7 +16,8 @@ const userSchema = new mongoose.Schema({
   role: { type: String, enum: ['admin', 'client'], default: 'client' },
 
   // Cohort / subscription
-  tier: { type: String, enum: ['standard', 'vip', 'none'], default: 'none' },
+  // tier is now a Plan key (plans are coach-editable), 'none' until chosen
+  tier: { type: String, default: 'none', trim: true },
   status: { type: String, enum: ['pending_payment', 'active', 'paused', 'completed', 'rejected'], default: 'pending_payment' },
   challengeStartDate: { type: Date },
   challengeLengthDays: { type: Number, default: 55 },
@@ -46,8 +47,10 @@ const userSchema = new mongoose.Schema({
   // Tracking / BMI
   weightLogs: [weightLogSchema],
   startWeightKg: { type: Number },
-  goalWeightKg: { type: Number },
+  goalWeightKg: { type: Number },   // legacy, no longer used by the BMI tool
   heightCm: { type: Number },
+  age: { type: Number, min: 2, max: 120 },
+  gender: { type: String, enum: ['female', 'male', 'other', ''], default: '' },
 
   createdAt: { type: Date, default: Date.now }
 });
@@ -71,10 +74,21 @@ userSchema.methods.bmi = function () {
   return Math.round((latest / (m * m)) * 10) / 10;
 };
 
+// Healthy weight band for this person's height (BMI 18.5–24.9).
+userSchema.methods.healthyWeightRange = function () {
+  if (!this.heightCm) return null;
+  const m = this.heightCm / 100;
+  return {
+    minKg: Math.round(18.5 * m * m * 10) / 10,
+    maxKg: Math.round(24.9 * m * m * 10) / 10
+  };
+};
+
 userSchema.methods.toSafeJSON = function () {
   const obj = this.toObject();
   delete obj.passwordHash;
   obj.bmi = this.bmi();
+  obj.healthyWeightRange = this.healthyWeightRange();
   return obj;
 };
 

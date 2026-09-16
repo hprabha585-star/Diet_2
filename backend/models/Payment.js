@@ -2,7 +2,8 @@ const mongoose = require('mongoose');
 
 const paymentSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  tier: { type: String, enum: ['standard', 'vip'], required: true },
+  tier: { type: String, required: true, trim: true },   // Plan key
+  planName: { type: String, trim: true },
   amountInr: { type: Number, required: true },
   utr: { type: String, required: true, trim: true },
   screenshotBase64: { type: String }, // small data-url image, kept optional

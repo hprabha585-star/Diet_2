@@ -6,6 +6,10 @@ const Regimen = require('../models/Regimen');
 const ChecklistLog = require('../models/ChecklistLog');
 const Payout = require('../models/Payout');
 const ProtocolDay = require('../models/ProtocolDay');
+const Plan = require('../models/Plan');
+const Alert = require('../models/Alert');
+const Message = require('../models/Message');
+const Settings = require('../models/Settings');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { computeFastingState, generateReferralCode } = require('../utils/helpers');
 const { PROTOCOL_DAYS, SAFETY_NOTES } = require('../utils/protocolData');
@@ -329,6 +333,8 @@ router.post('/payments/:id/approve', async (req, res) => {
   const client = await User.findById(payment.user);
   client.status = 'active';
   client.tier = payment.tier;
+  const plan = await Plan.findOne({ key: payment.tier });
+  if (plan && plan.durationDays) client.challengeLengthDays = plan.durationDays;
   if (!client.challengeStartDate) client.challengeStartDate = new Date();
 
   // Credit referrer ₹500 on first approved payment
@@ -395,6 +401,219 @@ router.post('/payouts/:id/reject', async (req, res) => {
   payout.resolvedBy = req.user._id;
   await payout.save();
   res.json({ payout });
+});
+
+/* ------------------------------------------------------------------ */
+/* Plans — coach-customisable pricing / packages                       */
+/* ------------------------------------------------------------------ */
+router.get('/plans', async (req, res) => {
+  let plans = await Plan.find({}).sort({ order: 1, priceInr: 1 });
+  if (!plans.length) {
+    await Plan.insertMany(Plan.DEFAULTS);
+    plans = await Plan.find({}).sort({ order: 1, priceInr: 1 });
+  }
+  res.json({ plans });
+});
+
+router.post('/plans', async (req, res) => {
+  try {
+    const { key, name, priceInr, durationDays, tagline, features, active, order } = req.body;
+    if (!name || priceInr === undefined) return res.status(400).json({ error: 'Name and price are required' });
+    const planKey = (key || name).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+    if (!planKey) return res.status(400).json({ error: 'Give the plan a usable name' });
+    if (await Plan.findOne({ key: planKey })) return res.status(409).json({ error: 'A plan with this name already exists' });
+
+    const plan = await Plan.create({
+      key: planKey, name, priceInr: Number(priceInr),
+      durationDays: Number(durationDays) || 55,
+      tagline: tagline || '',
+      features: Array.isArray(features) ? features : String(features || '').split('\n').map(f => f.trim()).filter(Boolean),
+      active: active !== false,
+      order: Number(order) || 0
+    });
+    res.status(201).json({ plan });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not create plan', detail: err.message });
+  }
+});
+
+router.put('/plans/:id', async (req, res) => {
+  try {
+    const { name, priceInr, durationDays, tagline, features, active, order } = req.body;
+    const plan = await Plan.findById(req.params.id);
+    if (!plan) return res.status(404).json({ error: 'Plan not found' });
+
+    if (name !== undefined) plan.name = name;
+    if (priceInr !== undefined) plan.priceInr = Number(priceInr);
+    if (durationDays !== undefined) plan.durationDays = Number(durationDays) || 55;
+    if (tagline !== undefined) plan.tagline = tagline;
+    if (features !== undefined) {
+      plan.features = Array.isArray(features)
+        ? features
+        : String(features || '').split('\n').map(f => f.trim()).filter(Boolean);
+    }
+    if (active !== undefined) plan.active = !!active;
+    if (order !== undefined) plan.order = Number(order) || 0;
+    await plan.save();
+    res.json({ plan });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not update plan', detail: err.message });
+  }
+});
+
+router.delete('/plans/:id', async (req, res) => {
+  try {
+    await Plan.deleteOne({ _id: req.params.id });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not delete plan', detail: err.message });
+  }
+});
+
+/* ------------------------------------------------------------------ */
+/* Alerts — announcements to one client or the whole cohort            */
+/* ------------------------------------------------------------------ */
+router.get('/alerts', async (req, res) => {
+  const alerts = await Alert.find({}).populate('user', 'name email').sort({ createdAt: -1 }).limit(100);
+  res.json({ alerts });
+});
+
+router.post('/alerts', async (req, res) => {
+  try {
+    const { title, body, level, clientId } = req.body;
+    if (!title || !body) return res.status(400).json({ error: 'Title and message are required' });
+    const alert = await Alert.create({
+      title: title.trim(), body: body.trim(),
+      level: ['info', 'important', 'urgent'].includes(level) ? level : 'info',
+      user: clientId && clientId !== 'all' ? clientId : null,
+      createdBy: req.user._id
+    });
+    res.status(201).json({ alert });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not send alert', detail: err.message });
+  }
+});
+
+router.delete('/alerts/:id', async (req, res) => {
+  await Alert.deleteOne({ _id: req.params.id });
+  res.json({ ok: true });
+});
+
+/* ------------------------------------------------------------------ */
+/* Chat with clients                                                   */
+/* ------------------------------------------------------------------ */
+router.get('/messages/threads', async (req, res) => {
+  const clients = await User.find({ role: 'client' }).select('name email status').sort({ name: 1 });
+  const threads = await Promise.all(clients.map(async (c) => {
+    const [last, unread] = await Promise.all([
+      Message.findOne({ client: c._id }).sort({ createdAt: -1 }),
+      Message.countDocuments({ client: c._id, sender: 'client', readByAdmin: false })
+    ]);
+    return {
+      _id: c._id, name: c.name, email: c.email, status: c.status,
+      lastMessage: last ? last.body : '',
+      lastAt: last ? last.createdAt : null,
+      lastSender: last ? last.sender : null,
+      unread
+    };
+  }));
+  threads.sort((a, b) => (b.unread - a.unread) || (new Date(b.lastAt || 0) - new Date(a.lastAt || 0)));
+  res.json({ threads, totalUnread: threads.reduce((n, t) => n + t.unread, 0) });
+});
+
+router.get('/messages/:clientId', async (req, res) => {
+  const messages = await Message.find({ client: req.params.clientId }).sort({ createdAt: 1 }).limit(300);
+  await Message.updateMany({ client: req.params.clientId, sender: 'client', readByAdmin: false }, { readByAdmin: true });
+  const client = await User.findById(req.params.clientId).select('name email phone status');
+  res.json({ messages, client });
+});
+
+router.post('/messages/:clientId', async (req, res) => {
+  try {
+    const body = (req.body.body || '').trim();
+    if (!body) return res.status(400).json({ error: 'Type a message first' });
+    const message = await Message.create({
+      client: req.params.clientId, sender: 'admin', body, readByAdmin: true, readByClient: false
+    });
+    res.status(201).json({ message });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not send message', detail: err.message });
+  }
+});
+
+/* ------------------------------------------------------------------ */
+/* Referral overview                                                   */
+/* ------------------------------------------------------------------ */
+router.get('/referrals', async (req, res) => {
+  const clients = await User.find({ role: 'client' })
+    .select('name email referralCode referredBy walletBalanceInr status createdAt')
+    .sort({ walletBalanceInr: -1, createdAt: -1 });
+
+  const byId = new Map(clients.map(c => [String(c._id), c]));
+  const rows = await Promise.all(clients.map(async (c) => {
+    const referred = clients.filter(x => String(x.referredBy) === String(c._id));
+    const pendingPayouts = await Payout.countDocuments({ user: c._id, status: 'pending' });
+    const paidOut = await Payout.aggregate([
+      { $match: { user: c._id, status: 'paid' } },
+      { $group: { _id: null, total: { $sum: '$amountInr' } } }
+    ]);
+    const referrer = c.referredBy ? byId.get(String(c.referredBy)) : null;
+    return {
+      _id: c._id, name: c.name, email: c.email, status: c.status,
+      referralCode: c.referralCode || '—',
+      walletBalanceInr: c.walletBalanceInr,
+      referredCount: referred.length,
+      referredNames: referred.map(r => r.name),
+      referredByName: referrer ? referrer.name : '',
+      pendingPayouts,
+      paidOutInr: paidOut.length ? paidOut[0].total : 0
+    };
+  }));
+
+  res.json({
+    referrals: rows,
+    totals: {
+      clients: rows.length,
+      referredClients: rows.filter(r => r.referredByName).length,
+      walletOutstanding: rows.reduce((n, r) => n + (r.walletBalanceInr || 0), 0),
+      paidOut: rows.reduce((n, r) => n + (r.paidOutInr || 0), 0)
+    }
+  });
+});
+
+// Manual wallet adjustment, in case a referral needs fixing by hand
+router.post('/referrals/:id/adjust', async (req, res) => {
+  try {
+    const amount = Number(req.body.amountInr);
+    if (!amount) return res.status(400).json({ error: 'Enter an amount (use a negative number to deduct)' });
+    const client = await User.findById(req.params.id);
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+    client.walletBalanceInr = Math.max(0, (client.walletBalanceInr || 0) + amount);
+    await client.save();
+    res.json({ walletBalanceInr: client.walletBalanceInr });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not adjust wallet', detail: err.message });
+  }
+});
+
+/* ------------------------------------------------------------------ */
+/* Contact-us settings shown to clients                                */
+/* ------------------------------------------------------------------ */
+router.get('/settings', async (req, res) => {
+  res.json({ settings: await Settings.getOrCreate() });
+});
+
+router.put('/settings', async (req, res) => {
+  try {
+    const s = await Settings.getOrCreate();
+    ['coachName', 'phone', 'whatsapp', 'email', 'upiId', 'address', 'supportHours', 'note']
+      .forEach(k => { if (req.body[k] !== undefined) s[k] = String(req.body[k]).trim(); });
+    s.updatedAt = new Date();
+    await s.save();
+    res.json({ settings: s });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not save settings', detail: err.message });
+  }
 });
 
 module.exports = router;

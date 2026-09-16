@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#16211D">
 <title>Coach console — FastCoach</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -24,6 +25,11 @@
       <a href="#payments" class="nav-link" data-view="payments"><span class="ico">₹</span><span>Payment approvals</span></a>
       <a href="#leaderboard" class="nav-link" data-view="leaderboard"><span class="ico">★</span><span>Leaderboard</span></a>
       <a href="#payouts" class="nav-link" data-view="payouts"><span class="ico">↗</span><span>Referral payouts</span></a>
+      <a href="#referrals" class="nav-link" data-view="referrals"><span class="ico">⇄</span><span>Referral overview</span></a>
+      <a href="#plans" class="nav-link" data-view="plans"><span class="ico">₪</span><span>Plans &amp; pricing</span></a>
+      <a href="#alerts" class="nav-link" data-view="alerts"><span class="ico">!</span><span>Send alerts</span></a>
+      <a href="#chat" class="nav-link" data-view="chat"><span class="ico">✉</span><span>Messages</span><span class="nav-badge" id="badge-chat" hidden>0</span></a>
+      <a href="#settings" class="nav-link" data-view="settings"><span class="ico">☎</span><span>Contact details</span></a>
     </nav>
     <div class="sidebar-foot">
       <button class="logout-btn" onclick="logout()">Sign out</button>
@@ -114,6 +120,93 @@
             <thead><tr><th>Client</th><th>Amount</th><th>UPI ID</th><th>Requested</th><th></th></tr></thead>
             <tbody id="payouts-body"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
           </table>
+        </div>
+      </section>
+
+
+      <!-- REFERRAL OVERVIEW -->
+      <section id="view-referrals" style="display:none;">
+        <div class="stat-grid" id="referral-totals"></div>
+        <div class="section-title">Who referred whom</div>
+        <div class="card table-scroll">
+          <table class="table">
+            <thead><tr><th>Client</th><th>Their code</th><th>Referred by</th><th>Signed up via them</th><th>Wallet</th><th>Paid out</th><th></th></tr></thead>
+            <tbody id="referrals-body"><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- PLANS -->
+      <section id="view-plans" style="display:none;">
+        <div class="row-between" style="margin-bottom:16px;">
+          <span class="hint">These are the plans clients pick from on their Payment page.</span>
+          <button class="btn btn-primary btn-sm" onclick="openPlanModal()">+ New plan</button>
+        </div>
+        <div id="plans-list" class="plan-cards"><p class="hint">Loading…</p></div>
+      </section>
+
+      <!-- ALERTS -->
+      <section id="view-alerts" style="display:none;">
+        <div class="card" style="max-width:560px; margin-bottom:24px;">
+          <div class="field">
+            <label for="al-client">Send to</label>
+            <select id="al-client"><option value="all">Everyone in the cohort</option></select>
+          </div>
+          <div class="field">
+            <label for="al-level">Priority</label>
+            <select id="al-level">
+              <option value="info">Info</option>
+              <option value="important">Important</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="al-title">Title</label>
+            <input type="text" id="al-title" placeholder="e.g. Tomorrow is a 24-hour fast">
+          </div>
+          <div class="field">
+            <label for="al-body">Message</label>
+            <textarea id="al-body" rows="4" placeholder="What do your clients need to know?"></textarea>
+          </div>
+          <button class="btn btn-primary" onclick="sendAlert()">Send alert</button>
+          <p class="error-text" id="al-error" style="display:none;"></p>
+          <p class="success-text" id="al-success" style="display:none;"></p>
+        </div>
+        <div class="section-title">Sent alerts</div>
+        <div id="alerts-sent"><p class="hint">Loading…</p></div>
+      </section>
+
+      <!-- CHAT -->
+      <section id="view-chat" style="display:none;">
+        <div class="chat-layout">
+          <div class="card thread-list" id="thread-list"><p class="hint">Loading…</p></div>
+          <div class="card chat-shell">
+            <div class="chat-head" id="chat-head">Pick a client to start</div>
+            <div class="chat-log" id="chat-log"><p class="hint">No conversation open.</p></div>
+            <div class="chat-composer">
+              <textarea id="chat-input" rows="1" placeholder="Reply to your client…"></textarea>
+              <button class="btn btn-primary" onclick="sendAdminMessage()">Send</button>
+            </div>
+            <p class="error-text" id="chat-error" style="display:none;"></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SETTINGS / CONTACT -->
+      <section id="view-settings" style="display:none;">
+        <div class="card" style="max-width:560px;">
+          <p class="hint" style="margin-bottom:16px;">These details appear on every client's “Contact us” page, and your UPI ID is shown on their payment screen.</p>
+          <div class="field"><label for="st-coachName">Coach / business name</label><input type="text" id="st-coachName"></div>
+          <div class="field"><label for="st-phone">Phone</label><input type="tel" id="st-phone"></div>
+          <div class="field"><label for="st-whatsapp">WhatsApp number (with country code)</label><input type="tel" id="st-whatsapp" placeholder="+9198XXXXXXXX"></div>
+          <div class="field"><label for="st-email">Email</label><input type="email" id="st-email"></div>
+          <div class="field"><label for="st-upiId">UPI ID for enrollment payments</label><input type="text" id="st-upiId" placeholder="yourname@upi"></div>
+          <div class="field"><label for="st-address">Address</label><textarea id="st-address" rows="2"></textarea></div>
+          <div class="field"><label for="st-supportHours">Support hours</label><input type="text" id="st-supportHours" placeholder="Mon–Sat, 9 AM – 7 PM"></div>
+          <div class="field"><label for="st-note">Note shown to clients</label><textarea id="st-note" rows="3"></textarea></div>
+          <button class="btn btn-primary" onclick="saveSettings()">Save contact details</button>
+          <p class="error-text" id="st-error" style="display:none;"></p>
+          <p class="success-text" id="st-success" style="display:none;"></p>
         </div>
       </section>
 
@@ -313,6 +406,34 @@
     <button class="btn btn-primary" style="width:100%;" onclick="submitResetPassword()">Set new password</button>
     <p class="error-text" id="rp-error" style="display:none;"></p>
     <p class="success-text" id="rp-success" style="display:none;"></p>
+  </div>
+</div>
+
+
+<!-- Plan editor -->
+<div class="modal-backdrop" id="plan-modal">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-head">
+      <h3 id="plan-modal-title">New plan</h3>
+      <button class="modal-close" onclick="closePlanModal()">&times;</button>
+    </div>
+    <input type="hidden" id="pl-id">
+    <div class="field"><label for="pl-name">Plan name</label><input type="text" id="pl-name" placeholder="e.g. Standard Tier"></div>
+    <div style="display:flex; gap:12px;">
+      <div class="field" style="flex:1;"><label for="pl-price">Price (₹)</label><input type="number" id="pl-price" min="0"></div>
+      <div class="field" style="flex:1;"><label for="pl-days">Duration (days)</label><input type="number" id="pl-days" min="1" value="55"></div>
+    </div>
+    <div class="field"><label for="pl-tagline">Tagline</label><input type="text" id="pl-tagline" placeholder="One line about who it's for"></div>
+    <div class="field">
+      <label for="pl-features">What's included (one per line)</label>
+      <textarea id="pl-features" rows="5"></textarea>
+    </div>
+    <div class="field checkbox-field">
+      <input type="checkbox" id="pl-active" checked>
+      <label for="pl-active">Show this plan to clients</label>
+    </div>
+    <button class="btn btn-primary" style="width:100%;" onclick="savePlan()">Save plan</button>
+    <p class="error-text" id="pl-error" style="display:none;"></p>
   </div>
 </div>
 

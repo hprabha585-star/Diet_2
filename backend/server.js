@@ -22,6 +22,21 @@ app.use(express.json({ limit: '6mb' })); // roomy enough for a base64 payment sc
 
 app.get('/api/health', (req, res) => res.json({ ok: true, service: 'fastcoach-backend' }));
 
+// Public: the plans shown on the landing page's pricing section.
+const Plan = require('./models/Plan');
+app.get('/api/plans', async (req, res) => {
+  try {
+    let plans = await Plan.find({ active: true }).sort({ order: 1, priceInr: 1 });
+    if (!plans.length) {
+      await Plan.insertMany(Plan.DEFAULTS);
+      plans = await Plan.find({ active: true }).sort({ order: 1, priceInr: 1 });
+    }
+    res.json({ plans });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not load plans' });
+  }
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/client', clientRoutes);
 app.use('/api/admin', adminRoutes);

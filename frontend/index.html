@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#16211D">
 <title>FastCoach — Coach-led fasting cohorts, not another calorie app</title>
 <meta name="description" content="A 55-day coach-led fasting and diet cohort. Your coach assigns the plan, you show up daily, the leaderboard keeps you honest.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -149,7 +150,7 @@
       <h2>One cohort, two levels of support</h2>
       <p>Pay directly by UPI. No card fees, no third-party gateway cut — your coach approves access once the transfer clears.</p>
     </div>
-    <div class="pricing-grid">
+    <div class="pricing-grid" id="pricing-grid">
       <div class="plan">
         <div class="plan-tag">Standard</div>
         <h3>Standard Tier</h3>
@@ -221,7 +222,10 @@
           </div>
           <div class="field">
             <label for="login-password">Password</label>
-            <input type="password" id="login-password" required autocomplete="current-password">
+            <div class="pw-wrap">
+              <input type="password" id="login-password" required autocomplete="current-password">
+              <button type="button" class="pw-toggle" data-target="login-password" aria-label="Show password">Show</button>
+            </div>
           </div>
           <input type="hidden" id="login-role" value="client">
           <button type="submit" class="btn btn-dark" style="width:100%;">Sign in</button>
@@ -245,7 +249,10 @@
           </div>
           <div class="field">
             <label for="su-password">Password</label>
-            <input type="password" id="su-password" required minlength="6" autocomplete="new-password">
+            <div class="pw-wrap">
+              <input type="password" id="su-password" required minlength="6" autocomplete="new-password">
+              <button type="button" class="pw-toggle" data-target="su-password" aria-label="Show password">Show</button>
+            </div>
           </div>
           <div class="field">
             <label for="su-referral">Referral code <span style="font-weight:400; color:#6B6F63;">(optional)</span></label>
@@ -277,6 +284,33 @@
 <script src="js/config.js"></script>
 <script src="js/api.js"></script>
 <script>
+  // Pricing section follows whatever plans the coach has published
+  (async function loadPublicPlans() {
+    try {
+      const data = await apiRequest('/plans', { auth: false });
+      if (!data.plans || !data.plans.length) return;
+      document.getElementById('pricing-grid').innerHTML = data.plans.map((p, i) => `
+        <div class="plan ${i === data.plans.length - 1 ? 'featured' : ''}">
+          <div class="plan-tag">${p.name}</div>
+          <h3>${p.name}</h3>
+          <div class="price">\u20B9${p.priceInr.toLocaleString('en-IN')} <span>/ ${p.durationDays} days</span></div>
+          <ul>${(p.features || []).map(f => `<li>${f}</li>`).join('')}</ul>
+          <a href="#access" class="btn ${i === data.plans.length - 1 ? 'btn-primary' : 'btn-outline'}" style="width:100%;">Join ${p.name}</a>
+        </div>`).join('');
+    } catch (err) { /* keep the static pricing as a fallback */ }
+  })();
+
+  // Show / hide password
+  document.querySelectorAll('.pw-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const input = document.getElementById(btn.dataset.target);
+      const showing = input.type === 'text';
+      input.type = showing ? 'password' : 'text';
+      btn.textContent = showing ? 'Show' : 'Hide';
+      btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+    });
+  });
+
   // Admin / Client role toggle on the login form
   document.querySelectorAll('.role-btn').forEach(btn => {
     btn.addEventListener('click', () => {

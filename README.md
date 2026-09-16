@@ -210,3 +210,52 @@ npm run seed:protocol -- --force   # overwrite coach edits with the defaults
 
 Existing clients keep their data. Weight entries logged before this update can't
 be edited (they were stored without an id) — new entries can.
+
+---
+
+## Update 2 — plans, gating, alerts, chat and contact
+
+**BMI now uses age and gender instead of a goal weight.** The result panel shows
+the BMI, the band it falls in, and the healthy weight range for that height
+(BMI 18.5–24.9) with how far above or below it the person currently is. Age and
+gender don't change the number — they change the reading, so under-18, over-65,
+and male/female body-composition notes appear alongside it. Logging a weight
+refreshes the BMI immediately.
+
+**Fasting and eating windows are now two separate panels** showing duration and
+timeline for each, with the live countdown inside whichever one is active.
+
+**Nothing is visible to a client until the coach approves their payment.** Before
+that, only Payment (plus Contact us and Message coach, so they can reach you) is
+reachable, and the API refuses the other routes rather than relying on the UI.
+The payment page shows the status of their last submission.
+
+**Plans are coach-editable.** Admin console → Plans & pricing: name, price,
+duration, tagline and feature list. Clients pick from these on their payment
+page and the landing page's pricing section follows automatically. The original
+Standard/VIP tiers are seeded the first time the page loads.
+
+**Meals and habits now reach the checklist.** Previously a checklist created
+before the coach assigned the day stayed empty forever. Today's checklist is now
+re-synced against the assigned plan on every load: new meals and habits appear,
+removed ones go, ticks are preserved, and the client's own habits are untouched.
+Duplicate meal types (two snacks) no longer share a key and tick together.
+
+**Alerts.** Admin console → Send alerts: to one client or the whole cohort, at
+info/important/urgent priority. Clients see them on an Alerts page with an unread
+badge in the sidebar.
+
+**Chat.** Admin console → Messages: a thread per client with unread counts,
+polling every 15 seconds. Clients get "Message coach" with the same thread.
+
+**Contact us.** Admin console → Contact details: coach name, phone, WhatsApp,
+email, UPI ID, address, support hours and a free-text note. Clients see them on a
+Contact us page with tap-to-call and a WhatsApp button.
+
+**Referrals in the admin console.** A Referral overview page:each client's code, who
+referred them, who they've referred, wallet balance, amount paid out, and a manual
+wallet adjustment for fixing mistakes.
+
+**Mobile.** 16px form inputs (no iOS zoom-on-focus), bottom-sheet modals, stacked
+window panels and BMI fields, larger tap targets, scrollable tables, and a
+condensed two-column stat grid on small phones.
