@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>FastCoach — Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/tokens.css">
+<link rel="stylesheet" href="../css/dashboard.css">
+</head>
+<body>
+
+<div class="app-shell">
+  <div class="sidebar-scrim" id="sidebar-scrim" onclick="closeSidebar()"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-top">
+      <div class="brand">FastCoach</div>
+      <div class="role-tag" id="plan-mode-tag">Client</div>
+    </div>
+    <nav>
+      <a href="#today" class="nav-link active" data-view="today"><span class="ico">☉</span><span>Today</span></a>
+      <a href="#history" class="nav-link" data-view="history"><span class="ico">☷</span><span>History &amp; weight</span></a>
+      <a href="#alerts" class="nav-link" data-view="alerts"><span class="ico">!</span><span>Alerts</span><span class="nav-badge" id="badge-alerts" hidden>0</span></a>
+      <a href="#chat" class="nav-link" data-view="chat"><span class="ico">✉</span><span>Message coach</span></a>
+      <a href="#referral" class="nav-link" data-view="referral"><span class="ico">⇄</span><span>Refer &amp; earn</span></a>
+      <a href="#contact" class="nav-link" data-view="contact"><span class="ico">☎</span><span>Contact us</span></a>
+      <a href="#payment" class="nav-link" data-view="payment"><span class="ico">₹</span><span>Payment</span></a>
+    </nav>
+    <div class="sidebar-foot">
+      <button class="logout-btn" onclick="logout()">Log out</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <button class="hamburger" onclick="openSidebar()" aria-label="Open menu">☰</button>
+      <h1 id="topbar-title">Today</h1>
+      <div id="user-chip" class="user-chip"></div>
+    </div>
+
+    <div class="content">
+      <div class="notice notice-warn card" id="locked-notice" style="display:none;">
+        <div>
+          <strong>Your account isn't active yet.</strong>
+          <p>Submit your payment, then wait for coach approval. Message coach or contact us are open in the meantime.</p>
+        </div>
+      </div>
+
+      <!-- TODAY — protocol clients -->
+      <div class="view active" id="view-today">
+        <div id="today-protocol" style="display:none;">
+          <div class="fasting-panels">
+            <div class="card fasting-panel">
+              <div class="panel-label">Fasting window</div>
+              <div class="panel-state" id="fast-state">—</div>
+              <div class="panel-countdown" id="fast-countdown">--:--:--</div>
+            </div>
+            <div class="card fasting-panel">
+              <div class="panel-label">Eating window</div>
+              <div class="panel-state" id="eat-state">—</div>
+              <div class="panel-countdown" id="eat-countdown">--:--:--</div>
+            </div>
+          </div>
+          <div class="card" id="pause-card" style="margin-top:16px;">
+            <div id="pause-inactive"><button class="btn btn-outline btn-sm" onclick="openPauseModal()">Pause fasting</button></div>
+            <div id="pause-active" style="display:none;">
+              <span class="badge badge-pending">Paused</span>
+              <span id="pause-reason-text" class="small muted" style="margin-left:8px;"></span>
+              <button class="btn btn-primary btn-sm" style="margin-left:12px;" onclick="resumeFasting()">Resume</button>
+            </div>
+          </div>
+
+          <div class="section-title">Day <span id="today-day">—</span> of <span id="today-total">55</span></div>
+          <p id="today-focus" class="hint" style="margin-bottom:14px;"></p>
+
+          <div class="section-subtitle">Meals</div>
+          <div id="meals-list"></div>
+          <button class="btn btn-outline btn-sm" onclick="openAddItem('meal')">+ Add your own meal</button>
+
+          <div class="section-subtitle">Habits</div>
+          <div id="habits-list"></div>
+          <button class="btn btn-outline btn-sm" onclick="openAddItem('habit')">+ Add habit</button>
+
+          <div class="section-subtitle">Water</div>
+          <div class="card">
+            <div style="font-size:15px;font-weight:600;margin-bottom:10px;">Today: <span id="water-total">0</span> ml</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn btn-outline btn-sm" onclick="logWater(250)">+250 ml</button>
+              <button class="btn btn-outline btn-sm" onclick="logWater(500)">+500 ml</button>
+              <button class="btn btn-outline btn-sm" onclick="logWaterCustom()">Custom</button>
+            </div>
+            <div id="water-entries" style="margin-top:12px;"></div>
+          </div>
+        </div>
+
+        <!-- TODAY — Fasting Tracker clients (fully self-guided) -->
+        <div id="today-tracker" style="display:none;">
+          <div class="tracker-hero">
+            <div class="panel-label" style="color:#A9B3AB;">Fasting Tracker — fully self-guided</div>
+            <div class="tracker-timer" id="tracker-timer">00:00:00</div>
+            <div class="tracker-target" id="tracker-target"></div>
+            <div id="tracker-idle-form" class="tracker-form">
+              <div class="field" style="margin-bottom:0;">
+                <label style="color:#C9D0C7;">Target hours</label>
+                <input type="number" id="tracker-target-input" value="16" min="1" max="72" style="width:100px;">
+              </div>
+              <button class="btn btn-primary" onclick="startTrackerFast()">Start fast</button>
+            </div>
+            <div id="tracker-running-actions" style="display:none;">
+              <button class="btn btn-primary" onclick="stopTrackerFast()">Stop fast</button>
+            </div>
+          </div>
+          <div class="section-title">History</div>
+          <div class="card" id="tracker-history"></div>
+        </div>
+      </div>
+
+      <!-- HISTORY & WEIGHT -->
+      <div class="view" id="view-history">
+        <div class="card">
+          <h3>Log today's weight</h3>
+          <div class="field" style="margin-top:14px;max-width:220px;"><label>Weight (kg)</label><input type="number" id="weight-input" step="0.1"></div>
+          <button class="btn btn-primary btn-sm" onclick="logWeight()">Save</button>
+          <div id="weight-list" style="margin-top:16px;"></div>
+        </div>
+        <div class="card" style="margin-top:16px;">
+          <h3>BMI</h3>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:14px;">
+            <div class="field" style="flex:1;min-width:100px;"><label>Height (cm)</label><input type="number" id="height-input"></div>
+            <div class="field" style="flex:1;min-width:100px;"><label>Age</label><input type="number" id="age-input"></div>
+            <div class="field" style="flex:1;min-width:100px;">
+              <label>Gender</label>
+              <select id="gender-input"><option value="">—</option><option value="female">Female</option><option value="male">Male</option><option value="other">Other</option></select>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="saveProfile()">Save</button>
+          <div id="bmi-result" style="margin-top:16px;"></div>
+        </div>
+      </div>
+
+      <!-- ALERTS -->
+      <div class="view" id="view-alerts"><div id="alerts-list"></div></div>
+
+      <!-- CHAT -->
+      <div class="view" id="view-chat">
+        <div class="card">
+          <div id="chat-thread" style="max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;"></div>
+          <div style="display:flex;gap:8px;margin-top:14px;">
+            <input type="text" id="chat-input" placeholder="Type a message…" style="flex:1;padding:11px 13px;border:1px solid var(--line);border-radius:var(--radius-sm);">
+            <button class="btn btn-primary btn-sm" onclick="sendMessage()">Send</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- REFERRAL -->
+      <div class="view" id="view-referral"><div class="card" id="referral-card"></div></div>
+
+      <!-- CONTACT -->
+      <div class="view" id="view-contact"><div class="card" id="contact-card"></div></div>
+
+      <!-- PAYMENT -->
+      <div class="view" id="view-payment"><div class="card" id="payment-card"></div></div>
+    </div>
+  </main>
+</div>
+
+<div class="modal-backdrop" id="add-item-modal">
+  <div class="modal">
+    <div class="modal-head"><h3 id="add-item-title">Add item</h3><button class="modal-close" onclick="closeModal('add-item-modal')">×</button></div>
+    <div class="field"><label>Label</label><input type="text" id="add-item-label"></div>
+    <div class="error-text" id="add-item-error" style="display:none;"></div>
+    <button class="btn btn-primary btn-sm" onclick="submitAddItem()">Add</button>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="pause-modal">
+  <div class="modal">
+    <div class="modal-head"><h3>Pause fasting</h3><button class="modal-close" onclick="closeModal('pause-modal')">×</button></div>
+    <p class="hint">Illness, travel, medical advice or medication — your streak is protected while paused.</p>
+    <div class="field" style="margin-top:14px;"><label>Reason</label><input type="text" id="pause-reason-input"></div>
+    <button class="btn btn-primary btn-sm" onclick="pauseFasting()">Pause</button>
+  </div>
+</div>
+
+<script src="../js/api.js"></script>
+<script src="../js/client.js"></script>
+</body>
+</html>

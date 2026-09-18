@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#16211D">
+<title>FastCoach — Coach-led fasting cohorts, or track your own fast</title>
+<meta name="description" content="A 55-day coach-led fasting cohort, or the self-guided Fasting Tracker if you'd rather run your own schedule.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/landing.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="container">
+    <div class="nav-logo">FastCoach</div>
+    <div class="nav-links">
+      <a href="#pricing">Pricing</a>
+      <a href="#access" class="btn btn-dark btn-sm">Sign in</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="container hero-grid">
+    <div>
+      <div class="hero-eyebrow">Coached cohort, or go it alone</div>
+      <h1>A fast is easier with a plan — coached or your own.</h1>
+      <p class="lede">Join the 55-day coach-led cohort where your coach sets the fasting window and meals every day and the leaderboard keeps you honest. Or pick the Fasting Tracker and run your own schedule, no guidance attached.</p>
+      <div class="hero-ctas">
+        <a href="#access" class="btn btn-primary">Get started</a>
+        <a href="#pricing" class="btn btn-outline">See plans</a>
+      </div>
+      <p class="hero-note">Direct UPI enrollment · no payment gateway markup · manually approved by your coach</p>
+    </div>
+    <div class="ring-card">
+      <div class="ring-wrap">
+        <svg width="220" height="220" viewBox="0 0 220 220">
+          <circle cx="110" cy="110" r="96" fill="none" stroke="#33443B" stroke-width="14"/>
+          <circle cx="110" cy="110" r="96" fill="none" stroke="#B8752E" stroke-width="14"
+                  stroke-dasharray="603" stroke-dashoffset="185" stroke-linecap="round"/>
+        </svg>
+        <div class="ring-label">
+          <div class="state" id="ring-state">Fasting</div>
+          <div class="time" id="ring-time">11:24:06</div>
+          <div class="sub">until eating window opens</div>
+        </div>
+      </div>
+      <div class="ring-legend">
+        <span class="l1">Fasting</span>
+        <span class="l2">Eating window</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section class="section" id="pricing">
+  <div class="container">
+    <div class="section-head">
+      <div class="kicker">Plans</div>
+      <h2>Coached cohort, or self-guided tracker</h2>
+      <p>Coach-created plans — the coach can add as many of either kind as they like.</p>
+    </div>
+    <div class="pricing-grid" id="pricing-grid">
+      <p class="hint">Loading plans…</p>
+    </div>
+  </div>
+</section>
+
+<section class="access" id="access">
+  <div class="container access-grid">
+    <div>
+      <h2>Sign in</h2>
+      <div class="role-toggle" style="margin-top:20px;">
+        <button class="role-btn active" id="role-client-btn" onclick="setRole('client')">Client</button>
+        <button class="role-btn" id="role-admin-btn" onclick="setRole('admin')">Coach / Admin</button>
+      </div>
+      <div class="tab-bar" style="margin-top:20px;">
+        <button class="tab-btn active" id="tab-login-btn" onclick="setTab('login')">Sign in</button>
+        <button class="tab-btn" id="tab-register-btn" onclick="setTab('register')">Create account</button>
+      </div>
+
+      <div class="auth-panel active" id="panel-login">
+        <form onsubmit="doLogin(event)">
+          <div class="field"><label>Email</label><input type="email" id="login-email" required></div>
+          <div class="field">
+            <label>Password</label>
+            <div class="pw-wrap">
+              <input type="password" id="login-password" required>
+              <button type="button" class="pw-toggle" onclick="togglePw('login-password', this)">Show</button>
+            </div>
+          </div>
+          <div class="error-text" id="login-error" style="display:none;"></div>
+          <button class="btn btn-primary" type="submit" style="width:100%;">Sign in</button>
+        </form>
+      </div>
+
+      <div class="auth-panel" id="panel-register">
+        <form onsubmit="doRegister(event)">
+          <div class="field"><label>Full name</label><input type="text" id="reg-name" required></div>
+          <div class="field"><label>Email</label><input type="email" id="reg-email" required></div>
+          <div class="field"><label>Phone</label><input type="tel" id="reg-phone"></div>
+          <div class="field">
+            <label>Password</label>
+            <div class="pw-wrap">
+              <input type="password" id="reg-password" minlength="6" required>
+              <button type="button" class="pw-toggle" onclick="togglePw('reg-password', this)">Show</button>
+            </div>
+          </div>
+          <div class="field"><label>Referral code (optional)</label><input type="text" id="reg-referral"></div>
+          <div class="error-text" id="reg-error" style="display:none;"></div>
+          <button class="btn btn-primary" type="submit" style="width:100%;">Create account</button>
+        </form>
+      </div>
+    </div>
+    <div class="card">
+      <h3>What happens after you sign up</h3>
+      <ul style="list-style:none; padding:0; margin-top:16px; font-size:14.5px; color:#3C4A41; line-height:1.9;">
+        <li>1. Pick a plan and submit your UPI payment reference.</li>
+        <li>2. Your coach approves it — usually within a day.</li>
+        <li>3. Coached plan: your coach assigns your daily window and meals. Tracker plan: you set your own fast right away.</li>
+        <li>4. Track weight, hit your streak, and message your coach any time.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div>© FastCoach</div>
+    <div>Direct UPI · coach-approved</div>
+  </div>
+</footer>
+
+<script src="js/api.js"></script>
+<script>
+let role = 'client';
+function setRole(r) {
+  role = r;
+  document.getElementById('role-client-btn').classList.toggle('active', r === 'client');
+  document.getElementById('role-admin-btn').classList.toggle('active', r === 'admin');
+  document.getElementById('panel-register').style.display = r === 'admin' ? 'none' : '';
+  document.querySelector('.tab-bar').style.display = r === 'admin' ? 'none' : '';
+}
+function setTab(t) {
+  document.getElementById('tab-login-btn').classList.toggle('active', t === 'login');
+  document.getElementById('tab-register-btn').classList.toggle('active', t === 'register');
+  document.getElementById('panel-login').classList.toggle('active', t === 'login');
+  document.getElementById('panel-register').classList.toggle('active', t === 'register');
+}
+function togglePw(id, btn) {
+  const el = document.getElementById(id);
+  const show = el.type === 'password';
+  el.type = show ? 'text' : 'password';
+  btn.textContent = show ? 'Hide' : 'Show';
+}
+
+async function doLogin(e) {
+  e.preventDefault();
+  const errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+  try {
+    const email = document.getElementById('login-email').value;
+    const password = document.getElementById('login-password').value;
+    const data = await apiRequest('/auth/login', { method: 'POST', auth: false, body: { email, password } });
+    if (role === 'admin' && data.user.role !== 'admin') {
+      throw new Error('This is a client account — switch to the "Client" tab to sign in.');
+    }
+    if (role === 'client' && data.user.role !== 'client') {
+      throw new Error('This is a coach/admin account — switch to the "Coach / Admin" tab to sign in.');
+    }
+    setSession(data.token, data.user);
+    window.location.href = data.user.role === 'admin' ? '/admin/dashboard.html' : '/client/dashboard.html';
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  }
+}
+
+async function doRegister(e) {
+  e.preventDefault();
+  const errEl = document.getElementById('reg-error');
+  errEl.style.display = 'none';
+  try {
+    const body = {
+      name: document.getElementById('reg-name').value,
+      email: document.getElementById('reg-email').value,
+      phone: document.getElementById('reg-phone').value,
+      password: document.getElementById('reg-password').value,
+      referralCode: document.getElementById('reg-referral').value
+    };
+    const data = await apiRequest('/auth/register', { method: 'POST', auth: false, body });
+    setSession(data.token, data.user);
+    window.location.href = '/client/dashboard.html';
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  }
+}
+
+async function loadPlans() {
+  const grid = document.getElementById('pricing-grid');
+  try {
+    const data = await apiRequest('/plans', { auth: false });
+    if (!data.plans.length) { grid.innerHTML = '<p class="hint">No plans published yet.</p>'; return; }
+    grid.innerHTML = data.plans.map((p, i) => `
+      <div class="plan ${i === 0 ? 'featured' : ''}">
+        <div class="plan-tag">${esc(p.mode === 'tracker' ? 'Self-guided' : 'Coached')}</div>
+        <h3>${esc(p.name)}</h3>
+        <div class="price">₹${p.priceInr}<span>/ ${p.durationDays} days</span></div>
+        <p style="font-size:14px;color:#3C4A41;margin-bottom:14px;">${esc(p.tagline || '')}</p>
+        <ul>${(p.features || []).map(f => `<li>✓ ${esc(f)}</li>`).join('')}</ul>
+        <a href="#access" class="btn btn-dark" style="width:100%;">Choose ${esc(p.name)}</a>
+      </div>
+    `).join('');
+  } catch (err) {
+    grid.innerHTML = '<p class="hint">Could not load plans right now.</p>';
+  }
+}
+loadPlans();
+setRole('client');
+
+// Hero ring ticks purely for visual flavor using local time against a
+// generic 16/8 window — the real countdown lives on the dashboards.
+function tickHeroRing() {
+  const state = computeFastingState({ startHour: 9, endHour: 17, isFullDayFast: false }, false);
+  document.getElementById('ring-state').textContent = state.state === 'eating' ? 'Eating' : 'Fasting';
+  document.getElementById('ring-time').textContent = fmtCountdown(state.secondsRemaining);
+}
+tickHeroRing();
+setInterval(tickHeroRing, 1000);
+</script>
+</body>
+</html>

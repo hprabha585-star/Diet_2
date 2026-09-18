@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>FastCoach — Coach console</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/tokens.css">
+<link rel="stylesheet" href="../css/dashboard.css">
+</head>
+<body>
+
+<div class="app-shell">
+  <div class="sidebar-scrim" id="sidebar-scrim" onclick="closeSidebar()"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-top">
+      <div class="brand">FastCoach</div>
+      <div class="role-tag">Coach console</div>
+    </div>
+    <nav>
+      <a href="#roster" class="nav-link active" data-view="roster"><span class="ico">☷</span><span>Client roster</span></a>
+      <a href="#payments" class="nav-link" data-view="payments"><span class="ico">₹</span><span>Payment approvals</span></a>
+      <a href="#leaderboard" class="nav-link" data-view="leaderboard"><span class="ico">★</span><span>Leaderboard</span></a>
+      <a href="#payouts" class="nav-link" data-view="payouts"><span class="ico">↗</span><span>Referral payouts</span></a>
+      <a href="#referrals" class="nav-link" data-view="referrals"><span class="ico">⇄</span><span>Referral overview</span></a>
+      <a href="#plans" class="nav-link" data-view="plans"><span class="ico">₪</span><span>Plans &amp; pricing</span></a>
+      <a href="#alerts" class="nav-link" data-view="alerts"><span class="ico">!</span><span>Send alerts</span></a>
+      <a href="#chat" class="nav-link" data-view="chat"><span class="ico">✉</span><span>Messages</span><span class="nav-badge" id="badge-chat" hidden>0</span></a>
+      <a href="#settings" class="nav-link" data-view="settings"><span class="ico">☎</span><span>Contact details</span></a>
+    </nav>
+    <div class="sidebar-foot"><button class="logout-btn" onclick="logout()">Log out</button></div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <button class="hamburger" onclick="openSidebar()" aria-label="Open menu">☰</button>
+      <h1 id="topbar-title">Client roster</h1>
+      <div id="user-chip" class="user-chip"></div>
+    </div>
+
+    <div class="content">
+
+      <!-- ROSTER -->
+      <div class="view active" id="view-roster">
+        <div class="row-between" style="margin-bottom:14px;">
+          <input type="text" class="roster-search" id="roster-search" placeholder="Search clients…" oninput="renderRoster()" style="max-width:280px;padding:10px 13px;border:1px solid var(--line);border-radius:var(--radius-sm);">
+          <button class="btn btn-dark btn-sm" onclick="openAddClientModal()">+ Add client</button>
+        </div>
+        <div class="roster-list" id="roster-list"><p class="hint">Loading…</p></div>
+      </div>
+
+      <!-- PAYMENTS -->
+      <div class="view" id="view-payments">
+        <div class="tabs-row">
+          <button class="pay-tab active" data-status="pending" onclick="setPaymentTab('pending')">Pending</button>
+          <button class="pay-tab" data-status="approved" onclick="setPaymentTab('approved')">Approved</button>
+          <button class="pay-tab" data-status="rejected" onclick="setPaymentTab('rejected')">Rejected</button>
+        </div>
+        <div class="table-scroll" style="margin-top:14px;">
+          <table class="table">
+            <thead><tr><th>Client</th><th>Plan</th><th>Amount</th><th>UTR</th><th>Submitted</th><th></th></tr></thead>
+            <tbody id="payments-body"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- LEADERBOARD -->
+      <div class="view" id="view-leaderboard">
+        <div class="table-scroll">
+          <table class="table">
+            <thead><tr><th>#</th><th>Client</th><th>Points</th><th>Streak</th><th>Best streak</th></tr></thead>
+            <tbody id="leaderboard-body"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- PAYOUTS -->
+      <div class="view" id="view-payouts">
+        <div class="tabs-row">
+          <button class="payout-tab active" data-status="pending" onclick="setPayoutTab('pending')">Pending</button>
+          <button class="payout-tab" data-status="paid" onclick="setPayoutTab('paid')">Paid</button>
+          <button class="payout-tab" data-status="rejected" onclick="setPayoutTab('rejected')">Rejected</button>
+        </div>
+        <div class="table-scroll" style="margin-top:14px;">
+          <table class="table">
+            <thead><tr><th>Client</th><th>Amount</th><th>UPI ID</th><th>Requested</th><th></th></tr></thead>
+            <tbody id="payouts-body"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- REFERRALS -->
+      <div class="view" id="view-referrals">
+        <div class="table-scroll">
+          <table class="table">
+            <thead><tr><th>Client</th><th>Code</th><th>Referred by</th><th>Referred count</th><th>Wallet</th><th></th></tr></thead>
+            <tbody id="referrals-body"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- PLANS -->
+      <div class="view" id="view-plans">
+        <div class="row-between" style="margin-bottom:14px;">
+          <span class="hint">Coach-editable — create both coached-protocol plans and self-guided Fasting Tracker plans.</span>
+          <button class="btn btn-dark btn-sm" onclick="openPlanModal()">+ New plan</button>
+        </div>
+        <div id="plans-list" class="roster-list"><p class="hint">Loading…</p></div>
+      </div>
+
+      <!-- ALERTS -->
+      <div class="view" id="view-alerts">
+        <div class="card">
+          <div class="field"><label>Send to</label>
+            <select id="alert-target"><option value="">Whole cohort</option></select>
+          </div>
+          <div class="field"><label>Title</label><input type="text" id="alert-title"></div>
+          <div class="field"><label>Message</label><textarea id="alert-body" rows="4"></textarea></div>
+          <div class="field"><label>Priority</label>
+            <select id="alert-level"><option value="info">Info</option><option value="important">Important</option><option value="urgent">Urgent</option></select>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="sendAlert()">Send</button>
+        </div>
+        <div id="sent-alerts" style="margin-top:20px;"></div>
+      </div>
+
+      <!-- CHAT -->
+      <div class="view" id="view-chat">
+        <div style="display:grid;grid-template-columns:260px 1fr;gap:16px;">
+          <div class="card" id="chat-threads" style="max-height:520px;overflow-y:auto;"></div>
+          <div class="card">
+            <div id="chat-thread" style="max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;"></div>
+            <div style="display:flex;gap:8px;margin-top:14px;">
+              <input type="text" id="chat-input" placeholder="Type a message…" style="flex:1;padding:11px 13px;border:1px solid var(--line);border-radius:var(--radius-sm);">
+              <button class="btn btn-primary btn-sm" onclick="sendAdminMessage()">Send</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SETTINGS -->
+      <div class="view" id="view-settings">
+        <div class="card" id="settings-card"><p class="hint">Loading…</p></div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<!-- ASSIGN PLAN modal (replaces the old standalone protocol tab) -->
+<div class="modal-backdrop" id="assign-plan-modal">
+  <div class="modal" style="max-width:680px;">
+    <div class="modal-head"><h3>Assign plan — <span id="assign-client-name"></span></h3><button class="modal-close" onclick="closeModal('assign-plan-modal')">×</button></div>
+    <input type="hidden" id="assign-client-id">
+    <div class="day-defaults-row">
+      <label class="hint" style="white-space:nowrap;">Day</label>
+      <input type="number" id="assign-day" min="1" max="55" style="width:80px;" onchange="fillDayDefaults()">
+      <select id="assign-day-preset" onchange="applyPreset()">
+        <option value="">Pick a 55-day default to pre-fill…</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <label class="hint"><input type="checkbox" id="assign-fullfast" onchange="toggleAssignFullFast()"> Full-day fast (no eating window)</label>
+    </div>
+    <div id="assign-window-fields" style="display:flex;gap:10px;margin-top:10px;">
+      <div class="field" style="flex:1;"><label>Eating window start (24h)</label><input type="number" id="assign-start" step="0.5" value="9"></div>
+      <div class="field" style="flex:1;"><label>Eating window end (24h)</label><input type="number" id="assign-end" step="0.5" value="17"></div>
+    </div>
+    <div class="field"><label>Focus / notes for the day</label><input type="text" id="assign-focus"></div>
+    <div class="field" style="max-width:200px;"><label>Water target (ml)</label><input type="number" id="assign-water" value="3000"></div>
+
+    <div class="checklist-section-title">Meals</div>
+    <div id="assign-meals-rows"></div>
+    <button class="btn btn-outline btn-sm add-row-btn" onclick="addMealRow()">+ Add meal</button>
+
+    <div class="checklist-section-title">Habit milestones</div>
+    <div id="assign-milestones-rows"></div>
+    <button class="btn btn-outline btn-sm add-row-btn" onclick="addMilestoneRow()">+ Add habit</button>
+
+    <div class="error-text" id="assign-error" style="display:none;"></div>
+    <div class="apply-scope-row">
+      <button class="btn btn-primary btn-sm" onclick="submitAssignPlan(false)">Apply to this client</button>
+      <button class="btn btn-outline btn-sm" onclick="submitAssignPlan(true)">Apply to ALL active clients</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD CLIENT modal -->
+<div class="modal-backdrop" id="add-client-modal">
+  <div class="modal">
+    <div class="modal-head"><h3>Add client</h3><button class="modal-close" onclick="closeModal('add-client-modal')">×</button></div>
+    <div class="field"><label>Name</label><input type="text" id="ac-name"></div>
+    <div class="field"><label>Email</label><input type="email" id="ac-email"></div>
+    <div class="field"><label>Phone</label><input type="tel" id="ac-phone"></div>
+    <div class="field"><label>Password</label><input type="text" id="ac-password"></div>
+    <div class="field"><label>Plan</label><select id="ac-tier"></select></div>
+    <div class="field"><label><input type="checkbox" id="ac-activate"> Activate immediately (skip payment approval)</label></div>
+    <div class="error-text" id="ac-error" style="display:none;"></div>
+    <button class="btn btn-primary btn-sm" onclick="submitAddClient()">Create client</button>
+  </div>
+</div>
+
+<!-- RESET PASSWORD modal -->
+<div class="modal-backdrop" id="reset-pw-modal">
+  <div class="modal">
+    <div class="modal-head"><h3>Reset password</h3><button class="modal-close" onclick="closeModal('reset-pw-modal')">×</button></div>
+    <input type="hidden" id="rp-client-id">
+    <div class="field"><label>New password</label><input type="text" id="rp-password"></div>
+    <div class="error-text" id="rp-error" style="display:none;"></div>
+    <button class="btn btn-primary btn-sm" onclick="submitResetPassword()">Reset</button>
+  </div>
+</div>
+
+<!-- PLAN modal (create/edit — includes Fasting Tracker mode) -->
+<div class="modal-backdrop" id="plan-modal">
+  <div class="modal">
+    <div class="modal-head"><h3 id="plan-modal-title">New plan</h3><button class="modal-close" onclick="closeModal('plan-modal')">×</button></div>
+    <input type="hidden" id="plan-id">
+    <div class="field"><label>Key (lowercase, unique)</label><input type="text" id="plan-key"></div>
+    <div class="field"><label>Name</label><input type="text" id="plan-name"></div>
+    <div class="field"><label>Mode</label>
+      <select id="plan-mode">
+        <option value="protocol">Coached protocol</option>
+        <option value="tracker">Fasting Tracker (self-guided, no coach)</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <div class="field" style="flex:1;"><label>Price (₹)</label><input type="number" id="plan-price"></div>
+      <div class="field" style="flex:1;"><label>Duration (days)</label><input type="number" id="plan-duration" value="55"></div>
+    </div>
+    <div class="field"><label>Tagline</label><input type="text" id="plan-tagline"></div>
+    <div class="field"><label>Features (one per line)</label><textarea id="plan-features" rows="4"></textarea></div>
+    <div class="error-text" id="plan-error" style="display:none;"></div>
+    <button class="btn btn-primary btn-sm" onclick="submitPlan()">Save</button>
+  </div>
+</div>
+
+<!-- PAUSE (coach-initiated) modal -->
+<div class="modal-backdrop" id="admin-pause-modal">
+  <div class="modal">
+    <div class="modal-head"><h3>Pause / resume</h3><button class="modal-close" onclick="closeModal('admin-pause-modal')">×</button></div>
+    <input type="hidden" id="ap-client-id">
+    <input type="hidden" id="ap-currently-paused">
+    <div class="field" id="ap-reason-field"><label>Reason</label><input type="text" id="ap-reason"></div>
+    <button class="btn btn-primary btn-sm" onclick="submitAdminPause()">Confirm</button>
+  </div>
+</div>
+
+<script src="../js/api.js"></script>
+<script src="../js/admin.js"></script>
+</body>
+</html>
