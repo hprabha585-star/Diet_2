@@ -14,7 +14,7 @@ const User = sequelize.define('User', {
   // Cohort / subscription
   tier: { type: DataTypes.STRING, defaultValue: 'none' },       // Plan key
   planMode: { type: DataTypes.ENUM('protocol', 'tracker'), defaultValue: 'protocol' },
-  status: { type: DataTypes.ENUM('pending_payment', 'active', 'paused', 'completed', 'rejected'), defaultValue: 'pending_payment' },
+  status: { type: DataTypes.ENUM('pending_payment', 'pending_approval', 'active', 'paused', 'completed', 'rejected'), defaultValue: 'pending_payment' },
   challengeStartDate: { type: DataTypes.DATEONLY },              // local calendar date, not a timestamp
   challengeLengthDays: { type: DataTypes.INTEGER, defaultValue: 55 },
   timezone: { type: DataTypes.STRING, defaultValue: 'Asia/Kolkata' },

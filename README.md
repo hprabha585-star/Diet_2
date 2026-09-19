@@ -107,29 +107,44 @@ npm run dev                # http://localhost:5000 — serves API + frontend tog
 
 ## 4. First login
 
-- **Coach/Admin**: the email/password from `ADMIN_EMAIL`/`ADMIN_PASSWORD`
-  in `.env`, after running `npm run seed:admin` — **or**, if you don't
-  have SSH/terminal access on your plan, just open the site and click
-  **Coach / Admin → "First time? Create your coach/admin account"** on
-  the login page. It only works while no admin account exists yet, and
-  is disabled automatically afterwards.
+- **Coach/Admin**: either run `npm run seed:admin` (uses `ADMIN_NAME`/
+  `ADMIN_EMAIL`/`ADMIN_PASSWORD` from `.env`) if you have terminal
+  access — **or**, from the login page, click
+  **Coach / Admin → "Need a coach/admin account? Request one"**. That
+  submits name/email/password through the app (so the password is
+  correctly bcrypt-hashed), but the account is created with
+  `status = 'pending_approval'` and **cannot log in yet**. To activate
+  it, open your database (hPanel → Databases → phpMyAdmin) and either:
+  - use phpMyAdmin's row editor to change that user's `status` field
+    from `pending_approval` to `active`, or
+  - run: `UPDATE Users SET status='active' WHERE email='their@email.com';`
+
+  Never insert a new admin row directly — always let the app create the
+  row (via seed or the request form) so the password is a real bcrypt
+  hash; you're only ever editing the `status` of a row the app already
+  created correctly.
 - **Clients**: sign up from the landing page, choose a plan (coached or
   Fasting Tracker), submit their UPI UTR, and wait for coach approval —
   Admin console → Payment approvals.
 
 ## Troubleshooting a broken deploy
 
-Visit `yourdomain.com/api/health` directly in a browser. It checks the
-database connection itself and tells you:
+Visit `yourdomain.com/api/health` directly in a browser. It runs real
+queries (not just a table-name lookup, which can misreport on hosts
+that case-fold table names) and tells you:
 - `"database": "NOT connected"` with an `error` message → your
   `DB_HOST`/`DB_NAME`/`DB_USER`/`DB_PASSWORD` environment variables are
   wrong, or MySQL isn't reachable from the app (check hPanel → MySQL
   Databases for the exact values).
-- `"tablesCreated": false` → the app connected fine but no tables exist
-  yet. This normally happens automatically on boot (`server.js` runs
-  `sequelize.sync()`), so seeing `false` usually means the app hasn't
-  restarted since being deployed, or the DB user lacks `CREATE TABLE`
-  privileges. Restart the app from hPanel and re-check.
+- `"tablesCreated": false` with a `tableError` message → the app
+  connected but the tables genuinely don't exist or aren't queryable;
+  the `tableError` field has the real MySQL error. Restart the app from
+  hPanel (table creation runs on every boot) and re-check.
+- `"tablesCreated": true, "adminCount": N, "usersWithBrokenPassword": N`
+  → tables are fine. `usersWithBrokenPassword` counts rows whose
+  password could never pass bcrypt's check — the fingerprint of a row
+  that got inserted directly into MySQL instead of through the app.
+  Delete any such row and recreate it through "Request one" above.
 
 If login returns a generic "Login failed" / 500 in the browser, open
 DevTools → **Network** tab (not just Console), click the failed
