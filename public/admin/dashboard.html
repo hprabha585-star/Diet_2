@@ -170,8 +170,14 @@
     <div class="field" style="max-width:200px;"><label>Water target (ml)</label><input type="number" id="assign-water" value="3000"></div>
 
     <div class="checklist-section-title">Meals</div>
+    <div class="day-defaults-row">
+      <select id="meal-preset-select" style="flex:1;">
+        <option value="">Quick-add a commonly used meal…</option>
+      </select>
+      <button class="btn btn-outline btn-sm" onclick="addPresetMealRow()">Add</button>
+    </div>
     <div id="assign-meals-rows"></div>
-    <button class="btn btn-outline btn-sm add-row-btn" onclick="addMealRow()">+ Add meal</button>
+    <button class="btn btn-outline btn-sm add-row-btn" onclick="addMealRow()">+ Add blank meal</button>
 
     <div class="checklist-section-title">Habit milestones</div>
     <div id="assign-milestones-rows"></div>

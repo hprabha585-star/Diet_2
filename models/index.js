@@ -41,7 +41,10 @@ const User = sequelize.define('User', {
   startWeightKg: { type: DataTypes.FLOAT },
   heightCm: { type: DataTypes.FLOAT },
   age: { type: DataTypes.INTEGER },
-  gender: { type: DataTypes.ENUM('female', 'male', 'other', ''), defaultValue: '' }
+  gender: { type: DataTypes.ENUM('female', 'male', 'other', ''), defaultValue: '' },
+
+  // Self-guided tracker: daily water goal (only meaningful for planMode='tracker')
+  waterGoalMl: { type: DataTypes.INTEGER, defaultValue: 3000 }
 });
 
 User.prototype.currentChallengeDay = function () {
@@ -287,9 +290,21 @@ const TrackerSession = sequelize.define('TrackerSession', {
 User.hasMany(TrackerSession, { foreignKey: 'userId', onDelete: 'CASCADE' });
 TrackerSession.belongsTo(User, { foreignKey: 'userId' });
 
+/* ------------------------------------------------------------------ */
+/* TrackerWaterEntry — water log for Fasting Tracker clients.          */
+/* Keyed by calendar date, not by challenge "day", since tracker        */
+/* clients have no protocol day counter at all.                        */
+/* ------------------------------------------------------------------ */
+const TrackerWaterEntry = sequelize.define('TrackerWaterEntry', {
+  ml: { type: DataTypes.INTEGER, allowNull: false },
+  at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
+});
+User.hasMany(TrackerWaterEntry, { foreignKey: 'userId', onDelete: 'CASCADE' });
+TrackerWaterEntry.belongsTo(User, { foreignKey: 'userId' });
+
 module.exports = {
   sequelize, User, WeightLog, Plan, Payment, Payout,
   Regimen, RegimenMeal, RegimenMilestone,
   ChecklistLog, ChecklistItem, WaterEntry,
-  Alert, AlertRead, Message, Settings, TrackerSession
+  Alert, AlertRead, Message, Settings, TrackerSession, TrackerWaterEntry
 };

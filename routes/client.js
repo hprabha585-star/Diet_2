@@ -3,7 +3,7 @@ const {
   User, WeightLog, Plan, Payment, Payout,
   Regimen, RegimenMeal, RegimenMilestone,
   ChecklistLog, ChecklistItem, WaterEntry,
-  Alert, AlertRead, Message, Settings, TrackerSession
+  Alert, AlertRead, Message, Settings, TrackerSession, TrackerWaterEntry
 } = require('../models');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { buildChecklistItems, recalcCompletion } = require('../utils/helpers');
@@ -440,6 +440,132 @@ router.post('/tracker/stop', requireActive, async (req, res) => {
 router.get('/tracker/history', requireActive, async (req, res) => {
   const sessions = await TrackerSession.findAll({ where: { userId: req.user.id }, order: [['startAt', 'DESC']], limit: 60 });
   res.json({ sessions });
+});
+
+// PATCH /client/tracker/session/:id  { startAt, targetHours }  — edit a running
+// fast (the "pencil" edit on the timer, e.g. "actually started earlier").
+router.patch('/tracker/session/:id', requireActive, async (req, res) => {
+  try {
+    const session = await TrackerSession.findOne({ where: { id: req.params.id, userId: req.user.id } });
+    if (!session) return res.status(404).json({ error: 'Fast not found' });
+    if (session.status !== 'running') return res.status(400).json({ error: 'Only a running fast can be edited' });
+    if (req.body.startAt) session.startAt = new Date(req.body.startAt);
+    if (req.body.targetHours) session.targetHours = req.body.targetHours;
+    await session.save();
+    res.json({ session });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not update fast', detail: err.message });
+  }
+});
+
+// GET /client/tracker/stats — the motivational numbers behind the
+// "Visualize your experience" style card: total fasts, longest fast,
+// rolling average, current/longest streak of days with a completed fast.
+router.get('/tracker/stats', requireActive, async (req, res) => {
+  const sessions = await TrackerSession.findAll({ where: { userId: req.user.id, status: { [Op.in]: ['completed', 'broken'] } }, order: [['startAt', 'DESC']] });
+  const completed = sessions.filter(s => s.status === 'completed');
+  const hoursOf = (s) => (new Date(s.endAt) - new Date(s.startAt)) / 3600000;
+
+  const totalFasts = sessions.length;
+  const longestFastHours = sessions.length ? Math.max(...sessions.map(hoursOf)) : 0;
+  const last7 = sessions.slice(0, 7);
+  const avg7 = last7.length ? last7.reduce((sum, s) => sum + hoursOf(s), 0) / last7.length : 0;
+
+  // Streak = consecutive calendar days (most recent first) with at least
+  // one COMPLETED fast that started that day.
+  const daysWithCompleted = new Set(completed.map(s => new Date(s.startAt).toDateString()));
+  let currentStreak = 0;
+  let cursor = new Date();
+  while (daysWithCompleted.has(cursor.toDateString())) {
+    currentStreak++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  // Longest streak ever, scanning the distinct days with a completed fast.
+  const sortedDays = [...daysWithCompleted].map(d => new Date(d)).sort((a, b) => a - b);
+  let longestStreak = 0, run = 0, prevDay = null;
+  for (const d of sortedDays) {
+    if (prevDay && (d - prevDay) / 86400000 === 1) run++;
+    else run = 1;
+    longestStreak = Math.max(longestStreak, run);
+    prevDay = d;
+  }
+
+  res.json({
+    totalFasts,
+    longestFastHours: Math.round(longestFastHours * 10) / 10,
+    avg7FastHours: Math.round(avg7 * 10) / 10,
+    currentStreak, longestStreak
+  });
+});
+
+// Water logging for tracker clients — keyed by calendar date, since they
+// have no protocol "day" counter at all.
+router.post('/tracker/water', requireActive, async (req, res) => {
+  try {
+    const { ml } = req.body;
+    if (!ml || ml <= 0) return res.status(400).json({ error: 'ml must be a positive number' });
+    const entry = await TrackerWaterEntry.create({ userId: req.user.id, ml });
+    res.status(201).json({ entry });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not log water', detail: err.message });
+  }
+});
+
+router.get('/tracker/water', requireActive, async (req, res) => {
+  const since = new Date(); since.setDate(since.getDate() - 9); since.setHours(0, 0, 0, 0);
+  const entries = await TrackerWaterEntry.findAll({ where: { userId: req.user.id, at: { [Op.gte]: since } }, order: [['at', 'ASC']] });
+
+  const byDate = {};
+  for (const e of entries) {
+    const key = new Date(e.at).toDateString();
+    byDate[key] = (byDate[key] || 0) + e.ml;
+  }
+  const last7 = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    last7.push({ date: d.toDateString(), ml: byDate[d.toDateString()] || 0 });
+  }
+  const todayMl = byDate[new Date().toDateString()] || 0;
+
+  res.json({ goalMl: req.user.waterGoalMl, todayMl, last7 });
+});
+
+router.delete('/tracker/water/:id', requireActive, async (req, res) => {
+  const entry = await TrackerWaterEntry.findOne({ where: { id: req.params.id, userId: req.user.id } });
+  if (!entry) return res.status(404).json({ error: 'Entry not found' });
+  await entry.destroy();
+  res.json({ ok: true });
+});
+
+router.post('/tracker/water-goal', requireActive, async (req, res) => {
+  const { goalMl } = req.body;
+  if (!goalMl || goalMl <= 0) return res.status(400).json({ error: 'goalMl is required' });
+  req.user.waterGoalMl = goalMl;
+  await req.user.save();
+  res.json({ goalMl: req.user.waterGoalMl });
+});
+
+/* ------------------------------------------------------------------ */
+/* Today-page progress card — small motivational numbers, shared shape  */
+/* whether the client is coached (streak/points) or on the tracker      */
+/* (fasts/streak). Kept separate from /dashboard so it's cheap to poll. */
+/* ------------------------------------------------------------------ */
+router.get('/progress', requireActive, async (req, res) => {
+  const user = req.user;
+  if (user.planMode === 'tracker') {
+    const sessions = await TrackerSession.findAll({ where: { userId: user.id, status: { [Op.in]: ['completed', 'broken'] } } });
+    const completed = sessions.filter(s => s.status === 'completed');
+    const daysWithCompleted = new Set(completed.map(s => new Date(s.startAt).toDateString()));
+    let currentStreak = 0, cursor = new Date();
+    while (daysWithCompleted.has(cursor.toDateString())) { currentStreak++; cursor.setDate(cursor.getDate() - 1); }
+    const longestFastHours = sessions.length ? Math.max(...sessions.map(s => (new Date(s.endAt) - new Date(s.startAt)) / 3600000)) : 0;
+    return res.json({ planMode: 'tracker', totalFasts: sessions.length, currentStreak, longestFastHours: Math.round(longestFastHours * 10) / 10 });
+  }
+  res.json({
+    planMode: 'protocol',
+    points: user.points, streakCurrent: user.streakCurrent, streakBest: user.streakBest,
+    day: user.currentChallengeDay(), challengeLengthDays: user.challengeLengthDays
+  });
 });
 
 /* ------------------------------------------------------------------ */

@@ -10,6 +10,7 @@ const {
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { generateReferralCode } = require('../utils/helpers');
 const { PROTOCOL_DAYS, SAFETY_NOTES } = require('../utils/protocolDefaults');
+const { MEAL_PRESETS } = require('../utils/mealPresets');
 
 const router = express.Router();
 router.use(requireAuth, requireRole('admin'));
@@ -143,6 +144,12 @@ router.post('/clients/:id/pause', async (req, res) => {
 // GET /api/admin/protocol-defaults  — static reference for the day picker
 router.get('/protocol-defaults', (req, res) => {
   res.json({ days: PROTOCOL_DAYS, safetyNotes: SAFETY_NOTES });
+});
+
+// GET /api/admin/meal-presets — quick-add library for the Assign Plan meal rows.
+// Purely a convenience list; the coach can still fully edit or delete any row.
+router.get('/meal-presets', (req, res) => {
+  res.json({ presets: MEAL_PRESETS });
 });
 
 async function writeRegimen(userId, payload) {

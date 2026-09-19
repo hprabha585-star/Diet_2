@@ -459,3 +459,49 @@
 .panel-state { font-family: var(--font-display); font-size: 20px; margin: 8px 0 4px; }
 .panel-countdown { font-family: var(--font-display); font-size: 30px; }
 @media (max-width: 700px) { .fasting-panels { grid-template-columns: 1fr; } }
+
+/* ============================================================
+   Fasting Tracker page — ring timer, stages, water goal, stats
+   ============================================================ */
+
+/* ---- Ring timer (shared shape with the landing page hero ring) ---- */
+.ring-wrap { position: relative; width: 220px; height: 220px; }
+.ring-wrap.small { width: 90px; height: 90px; }
+.ring-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.ring-label .state { font-size: 12px; letter-spacing: 0.5px; color: var(--ember); font-weight: 700; text-transform: uppercase; }
+.ring-label .time { font-family: var(--font-display); font-size: 30px; margin-top: 4px; color: var(--paper); }
+.ring-label .sub { font-size: 12px; color: #A9B3AB; margin-top: 4px; }
+
+/* ---- Progress strip (Today page — motivational numbers) ---- */
+.progress-strip { display: flex; gap: 22px; flex-wrap: wrap; margin-bottom: 16px; padding: 16px 20px; }
+.progress-strip .p-item { text-align: center; }
+.progress-strip .p-num { font-family: var(--font-display); font-size: 22px; color: var(--ember); }
+.progress-strip .p-lbl { font-size: 11.5px; color: #6B6F63; text-transform: uppercase; letter-spacing: 0.3px; }
+
+/* ---- Nav lock badge ---- */
+.nav-lock { margin-left: auto; font-size: 12px; opacity: 0.7; }
+.nav-link.unlocked .nav-lock { display: none; }
+
+/* ---- Stage timeline (Catabolic / Fat burning / Ketosis) ---- */
+.stage-timeline { display: flex; align-items: center; gap: 6px; }
+.stage-step { flex: 1; text-align: center; padding: 10px 6px; border-radius: var(--radius-sm); background: var(--paper); font-size: 12.5px; color: #6B6F63; border: 1px solid var(--line); }
+.stage-step.active { background: var(--forest-dim); color: var(--forest); border-color: var(--forest); font-weight: 700; }
+.stage-step.done { background: var(--ember-dim); color: var(--ember); border-color: var(--ember-dim); }
+.stage-arrow { color: var(--line); font-size: 14px; }
+
+/* ---- Water goal ring + history bars ---- */
+.water-goal-row { display: flex; align-items: center; gap: 18px; }
+.water-bars { display: flex; align-items: flex-end; gap: 6px; height: 90px; }
+.water-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+.water-bar { width: 100%; background: var(--line); border-radius: 3px 3px 0 0; position: relative; min-height: 2px; }
+.water-bar .fill { position: absolute; bottom: 0; left: 0; right: 0; background: #3FA0D6; border-radius: 3px 3px 0 0; }
+.water-bar-lbl { font-size: 10.5px; color: #6B6F63; margin-top: 4px; }
+
+/* ---- Stat grid (Fasting Tracker "your progress") ---- */
+.stat-grid { display: grid; gap: 12px; }
+.stat-grid.two { grid-template-columns: 1fr 1fr; }
+.stat-grid.four { grid-template-columns: repeat(4, 1fr); }
+.stat-card { text-align: center; padding: 16px 10px; }
+.stat-card .val { font-family: var(--font-display); font-size: 22px; }
+.stat-card .lbl { font-size: 11.5px; color: #6B6F63; margin-top: 4px; }
+@media (max-width: 600px) { .stat-grid.four { grid-template-columns: repeat(2, 1fr); } }

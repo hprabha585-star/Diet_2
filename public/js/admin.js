@@ -1,5 +1,6 @@
 let roster = [];
 let protocolDefaults = [];
+let mealPresets = [];
 let plansCache = [];
 let paymentTab = 'pending';
 let payoutTab = 'pending';
@@ -18,6 +19,7 @@ async function init() {
   });
 
   await loadProtocolDefaults();
+  await loadMealPresets();
   await loadRoster();
   await loadPlans();
   loadPayments();
@@ -220,6 +222,23 @@ function applyPreset() {
 
 function toggleAssignFullFast() {
   document.getElementById('assign-window-fields').style.display = document.getElementById('assign-fullfast').checked ? 'none' : 'flex';
+}
+
+// Quick-add library: purely a convenience for the coach — picking one just
+// pre-fills a normal, fully-editable meal row.
+async function loadMealPresets() {
+  const data = await apiRequest('/admin/meal-presets');
+  mealPresets = data.presets;
+  const select = document.getElementById('meal-preset-select');
+  select.innerHTML = '<option value="">Quick-add a commonly used meal…</option>' +
+    mealPresets.map((m, i) => `<option value="${i}">${esc(m.name)} (${m.type.replace('_', ' ')}${m.calories ? `, ${m.calories} kcal` : ''})</option>`).join('');
+}
+function addPresetMealRow() {
+  const idx = document.getElementById('meal-preset-select').value;
+  if (idx === '') return;
+  const m = mealPresets[idx];
+  addMealRow(m.type, m.name, m.calories);
+  document.getElementById('meal-preset-select').value = '';
 }
 
 function addMealRow(type = 'breakfast', name = '', calories = '') {
