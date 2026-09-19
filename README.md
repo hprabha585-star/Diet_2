@@ -108,10 +108,34 @@ npm run dev                # http://localhost:5000 — serves API + frontend tog
 ## 4. First login
 
 - **Coach/Admin**: the email/password from `ADMIN_EMAIL`/`ADMIN_PASSWORD`
-  in `.env`, after running `npm run seed:admin`.
+  in `.env`, after running `npm run seed:admin` — **or**, if you don't
+  have SSH/terminal access on your plan, just open the site and click
+  **Coach / Admin → "First time? Create your coach/admin account"** on
+  the login page. It only works while no admin account exists yet, and
+  is disabled automatically afterwards.
 - **Clients**: sign up from the landing page, choose a plan (coached or
   Fasting Tracker), submit their UPI UTR, and wait for coach approval —
   Admin console → Payment approvals.
+
+## Troubleshooting a broken deploy
+
+Visit `yourdomain.com/api/health` directly in a browser. It checks the
+database connection itself and tells you:
+- `"database": "NOT connected"` with an `error` message → your
+  `DB_HOST`/`DB_NAME`/`DB_USER`/`DB_PASSWORD` environment variables are
+  wrong, or MySQL isn't reachable from the app (check hPanel → MySQL
+  Databases for the exact values).
+- `"tablesCreated": false` → the app connected fine but no tables exist
+  yet. This normally happens automatically on boot (`server.js` runs
+  `sequelize.sync()`), so seeing `false` usually means the app hasn't
+  restarted since being deployed, or the DB user lacks `CREATE TABLE`
+  privileges. Restart the app from hPanel and re-check.
+
+If login returns a generic "Login failed" / 500 in the browser, open
+DevTools → **Network** tab (not just Console), click the failed
+`/api/auth/login` request, and check the **Response** tab — the JSON
+body includes a `detail` field with the actual database error, which is
+far more specific than the Console's one-line summary.
 
 ## Never insert users directly into MySQL
 

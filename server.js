@@ -12,7 +12,29 @@ const app = express();
 
 app.use(express.json({ limit: '6mb' })); // roomy enough for a base64 payment screenshot
 
-app.get('/api/health', (req, res) => res.json({ ok: true, service: 'fastcoach-backend' }));
+// /api/health checks the database too, so you can diagnose a broken
+// deploy from a browser tab — no SSH or server logs needed. Visit
+// yourdomain.com/api/health directly.
+app.get('/api/health', async (req, res) => {
+  try {
+    await sequelize.authenticate();
+    const { User } = require('./models');
+    const userTableExists = await sequelize.getQueryInterface().tableExists('Users');
+    res.json({
+      ok: true,
+      service: 'fastcoach-backend',
+      database: 'connected',
+      tablesCreated: userTableExists
+    });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      service: 'fastcoach-backend',
+      database: 'NOT connected',
+      error: err.message
+    });
+  }
+});
 
 // Public: the plans shown on the landing page's pricing section
 // (includes both 55-day protocol plans and Fasting Tracker plans).
