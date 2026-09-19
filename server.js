@@ -29,6 +29,14 @@ app.get('/api/health', async (req, res) => {
     const count = await User.count();
     result.tablesCreated = true;
     result.userCount = count;
+    result.adminCount = await User.count({ where: { role: 'admin' } });
+    // Counts, not identities — flags rows whose password could never pass
+    // bcrypt.compare (e.g. someone was typed straight into MySQL instead of
+    // going through registration/bootstrap). This is the #1 cause of a
+    // 500 on login that otherwise looks like a working deploy.
+    const BCRYPT_PATTERN = /^\$2[aby]\$\d{2}\$/;
+    const all = await User.findAll({ attributes: ['passwordHash'] });
+    result.usersWithBrokenPassword = all.filter(u => !BCRYPT_PATTERN.test(u.passwordHash || '')).length;
   } catch (err) {
     result.tablesCreated = false;
     result.tableError = err.message; // e.g. "Table 'xxx.Users' doesn't exist"

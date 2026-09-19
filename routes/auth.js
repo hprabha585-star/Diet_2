@@ -41,6 +41,7 @@ router.post('/register', async (req, res) => {
     const token = signToken(user);
     res.status(201).json({ token, user: user.toSafeJSON() });
   } catch (err) {
+    console.error('Registration failed:', err);
     res.status(500).json({ error: 'Registration failed', detail: err.message });
   }
 });
@@ -60,6 +61,7 @@ router.post('/login', async (req, res) => {
     const token = signToken(user);
     res.json({ token, user: user.toSafeJSON() });
   } catch (err) {
+    console.error('Login failed:', err);
     res.status(500).json({ error: 'Login failed', detail: err.message });
   }
 });
@@ -76,6 +78,7 @@ router.get('/admin-exists', async (req, res) => {
     const count = await User.count({ where: { role: 'admin' } });
     res.json({ exists: count > 0 });
   } catch (err) {
+    console.error('admin-exists check failed:', err);
     res.status(500).json({ error: 'Could not check admin status', detail: err.message });
   }
 });
@@ -107,6 +110,7 @@ router.post('/bootstrap-admin', async (req, res) => {
     const token = signToken(admin);
     res.status(201).json({ token, user: admin.toSafeJSON() });
   } catch (err) {
+    console.error('bootstrap-admin failed:', err);
     res.status(500).json({ error: 'Could not create admin account', detail: err.message });
   }
 });
