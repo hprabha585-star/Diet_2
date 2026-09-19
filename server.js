@@ -12,28 +12,28 @@ const app = express();
 
 app.use(express.json({ limit: '6mb' })); // roomy enough for a base64 payment screenshot
 
-// /api/health checks the database too, so you can diagnose a broken
-// deploy from a browser tab — no SSH or server logs needed. Visit
-// yourdomain.com/api/health directly.
+// /api/health checks the database with a REAL query (not just a table-name
+// lookup, which can misreport on hosts that case-fold table names) so you
+// can diagnose a broken deploy from a browser tab — no SSH needed.
+// Visit yourdomain.com/api/health directly.
 app.get('/api/health', async (req, res) => {
+  const result = { ok: true, service: 'fastcoach-backend' };
   try {
     await sequelize.authenticate();
-    const { User } = require('./models');
-    const userTableExists = await sequelize.getQueryInterface().tableExists('Users');
-    res.json({
-      ok: true,
-      service: 'fastcoach-backend',
-      database: 'connected',
-      tablesCreated: userTableExists
-    });
+    result.database = 'connected';
   } catch (err) {
-    res.status(500).json({
-      ok: false,
-      service: 'fastcoach-backend',
-      database: 'NOT connected',
-      error: err.message
-    });
+    return res.status(500).json({ ok: false, service: 'fastcoach-backend', database: 'NOT connected', error: err.message });
   }
+  try {
+    const { User } = require('./models');
+    const count = await User.count();
+    result.tablesCreated = true;
+    result.userCount = count;
+  } catch (err) {
+    result.tablesCreated = false;
+    result.tableError = err.message; // e.g. "Table 'xxx.Users' doesn't exist"
+  }
+  res.json(result);
 });
 
 // Public: the plans shown on the landing page's pricing section
@@ -71,9 +71,14 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 
 connectDB().then(async () => {
-  // sync() only creates tables that don't exist yet — it's safe to run on
-  // every boot. Use `npm run migrate` for an explicit one-off setup, or
-  // `sequelize.sync({ alter: true })` locally if you change a model shape.
-  await sequelize.sync();
+  try {
+    // sync() creates any table that doesn't exist yet — safe to run on
+    // every boot. Logged explicitly here so a failure shows up in
+    // Hostinger's Runtime logs instead of failing silently.
+    await sequelize.sync();
+    console.log('Database tables verified/created.');
+  } catch (err) {
+    console.error('sequelize.sync() failed — tables were NOT created:', err.message);
+  }
   app.listen(PORT, () => console.log(`FastCoach API running on port ${PORT}`));
 });
