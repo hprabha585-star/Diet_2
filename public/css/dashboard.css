@@ -506,13 +506,78 @@
 .stat-card .lbl { font-size: 11.5px; color: #6B6F63; margin-top: 4px; }
 @media (max-width: 600px) { .stat-grid.four { grid-template-columns: repeat(2, 1fr); } }
 
-/* ---- Motivational progress bars (Today page) ---- */
+/* ---- Today's checklist progress (Today page) ----
+   NOTE: these used to be .bar-row/.bar-track/.bar-fill, which collided
+   with the water bar-CHART rules higher up in this file (.bar-track
+   there sets max-width: 40px and display:flex). That collision is why
+   the progress bar rendered as an invisible sliver. Namespaced now. */
 .progress-bars { margin-bottom: 18px; }
-.bar-row { margin-bottom: 12px; }
-.bar-row-label { display: flex; justify-content: space-between; font-size: 12.5px; color: #6B6F63; margin-bottom: 5px; }
-.bar-track { height: 10px; background: var(--line); border-radius: 100px; overflow: hidden; }
-.bar-fill { height: 100%; background: var(--ember); border-radius: 100px; transition: width 0.4s ease; }
-.bar-fill-journey { background: var(--forest); }
+.prog-card { padding: 18px 20px; }
+.prog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 12px; }
+.prog-title { font-size: 15px; font-weight: 700; }
+.prog-sub { font-size: 12.5px; color: #6B6F63; margin-top: 3px; }
+.prog-pct { font-family: var(--font-display); font-size: 26px; color: var(--ember); line-height: 1; }
+.prog-pct.hit { color: var(--success); }
+
+.prog-track {
+  position: relative; height: 14px; width: 100%; max-width: none;
+  background: var(--line); border-radius: 100px; overflow: hidden;
+}
+.prog-track.slim { height: 8px; }
+.prog-fill {
+  height: 100%; width: 0; background: var(--ember); border-radius: 100px;
+  transition: width 0.45s ease, background 0.25s ease;
+}
+.prog-fill.hit { background: var(--success); }
+.prog-fill.journey { background: var(--forest); }
+.prog-marker {
+  position: absolute; top: -2px; bottom: -2px; width: 2px;
+  background: var(--ink); opacity: 0.55; border-radius: 2px;
+}
+.prog-scale {
+  position: relative; display: flex; justify-content: space-between;
+  font-size: 11px; color: #6B6F63; margin-top: 5px;
+}
+.prog-scale-mid { position: absolute; transform: translateX(-50%); }
+.prog-row-journey { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.prog-row-journey .prog-sub { margin-bottom: 6px; }
+
+/* ---- BMI calculator ---- */
+.bmi-card h3 { font-size: 19px; }
+.bmi-inputs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 16px; }
+.bmi-inputs .field { margin-bottom: 0; }
+.bmi-actions { display: flex; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
+
+.bmi-result-grid { display: grid; grid-template-columns: 340px 1fr; gap: 24px; align-items: center; }
+.bmi-gauge-wrap { text-align: center; }
+.bmi-gauge { width: 100%; max-width: 340px; height: auto; display: block; margin: 0 auto; }
+.bmi-gauge-value { font-family: var(--font-display); font-size: 26px; margin-top: -6px; }
+
+.bmi-headline { font-size: 18px; margin-bottom: 14px; }
+.bmi-headline strong { font-family: var(--font-display); font-size: 26px; }
+.bmi-cat {
+  display: inline-block; margin-left: 8px; padding: 3px 12px; border-radius: 100px;
+  font-size: 12.5px; font-weight: 700;
+}
+.bmi-cat.ok { background: var(--forest-dim); color: var(--forest); }
+.bmi-cat.warn { background: var(--ember-dim); color: #8F5720; }
+
+.bmi-facts { list-style: none; padding: 0; margin: 0; }
+.bmi-facts li {
+  display: flex; justify-content: space-between; gap: 14px;
+  padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px;
+}
+.bmi-facts li span { color: #55594E; }
+.bmi-facts li b { font-family: var(--font-display); font-weight: 600; white-space: nowrap; }
+
+@media (max-width: 860px) {
+  .bmi-inputs { grid-template-columns: 1fr 1fr; }
+  .bmi-result-grid { grid-template-columns: 1fr; gap: 12px; }
+}
+@media (max-width: 480px) {
+  .bmi-inputs { grid-template-columns: 1fr; }
+  .prog-pct { font-size: 22px; }
+}
 
 /* ---- Points-earned toast ---- */
 .points-toast {

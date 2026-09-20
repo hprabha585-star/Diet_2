@@ -103,20 +103,69 @@ async function loadProgress() {
         <div class="p-item"><div class="p-num">${p.day}/${p.challengeLengthDays}</div><div class="p-lbl">Day</div></div>`;
 
       const journeyPct = p.challengeLengthDays ? Math.min(100, Math.round((p.day / p.challengeLengthDays) * 100)) : 0;
-      const todayPct = (dashboardData && dashboardData.checklist) ? dashboardData.checklist.completionPercent : 0;
-      barsEl.innerHTML = `
-        <div class="bar-row">
-          <div class="bar-row-label"><span>Today's checklist</span><span>${todayPct}%</span></div>
-          <div class="bar-track"><div class="bar-fill" style="width:${todayPct}%;"></div></div>
-        </div>
-        <div class="bar-row">
-          <div class="bar-row-label"><span>55-day journey</span><span>Day ${p.day} of ${p.challengeLengthDays}</span></div>
-          <div class="bar-track"><div class="bar-fill bar-fill-journey" style="width:${journeyPct}%;"></div></div>
-        </div>`;
+      renderChecklistProgress({
+        percent: p.todayPercent, done: p.todayDone, total: p.todayTotal,
+        scored: p.todayScored, threshold: p.threshold, pointsPerDay: p.pointsPerDay,
+        journeyPct, day: p.day, totalDays: p.challengeLengthDays
+      });
       barsEl.style.display = 'block';
     }
     el.style.display = 'flex';
   } catch (err) { /* not active yet — leave the strip hidden */ }
+}
+
+/**
+ * Today's checklist progress bar.
+ *
+ * The old markup reused .bar-row/.bar-track/.bar-fill — the same class
+ * names the water bar-CHART uses, and that rule set `max-width: 40px`
+ * on .bar-track, so the progress bar rendered as an invisible 40px
+ * sliver. These classes are prog-* and collide with nothing.
+ *
+ * The bar also carries a marker at the scoring threshold, so it's
+ * obvious how much of the checklist banks the day's points.
+ */
+let lastProgress = null;
+
+function renderChecklistProgress(p) {
+  lastProgress = Object.assign({}, lastProgress, p);
+  const d = lastProgress;
+  const barsEl = document.getElementById('progress-bars');
+  if (!barsEl) return;
+
+  const pct = Math.max(0, Math.min(100, d.percent || 0));
+  const threshold = d.threshold || 80;
+  const pointsPerDay = d.pointsPerDay || 100;
+  const total = d.total || 0;
+  const done = d.done || 0;
+
+  const status = !total
+    ? 'No plan assigned for today yet.'
+    : d.scored
+      ? `Day complete — ${pointsPerDay} points banked.`
+      : `${threshold - pct}% more to bank today's ${pointsPerDay} points.`;
+
+  barsEl.innerHTML = `
+    <div class="prog-card card">
+      <div class="prog-head">
+        <div>
+          <div class="prog-title">Today's checklist</div>
+          <div class="prog-sub">${done} of ${total} coach-assigned item${total === 1 ? '' : 's'} done${total ? ` · ${status}` : ''}</div>
+        </div>
+        <div class="prog-pct ${d.scored ? 'hit' : ''}">${pct}%</div>
+      </div>
+      <div class="prog-track">
+        <div class="prog-fill ${d.scored ? 'hit' : ''}" style="width:${pct}%;"></div>
+        <div class="prog-marker" style="left:${threshold}%;" title="${threshold}% scores the day"></div>
+      </div>
+      <div class="prog-scale"><span>0%</span><span class="prog-scale-mid" style="left:${threshold}%;">${threshold}%</span><span>100%</span></div>
+
+      <div class="prog-row-journey">
+        <div class="prog-sub">55-day journey — day ${d.day || 0} of ${d.totalDays || 55}</div>
+        <div class="prog-track slim"><div class="prog-fill journey" style="width:${d.journeyPct || 0}%;"></div></div>
+      </div>
+    </div>`;
+  barsEl.style.display = 'block';
 }
 
 function renderProtocolToday() {
@@ -169,10 +218,17 @@ function renderWater() {
 async function toggleItem(itemId, done) {
   try {
     const res = await apiRequest('/client/checklist', { method: 'POST', body: { itemId, done } });
+    // Paint the new percentage straight away, then refresh from the server.
+    renderChecklistProgress({
+      percent: res.completionPercent, done: res.scoredDone, total: res.scoredTotal,
+      scored: res.dayScored, threshold: res.threshold, pointsPerDay: res.pointsPerDay
+    });
     await loadDashboard();
-    await loadProgress(); // streak/points just changed server-side — refresh the strip
+    await loadProgress(); // points/streak are re-derived server-side
     if (res.awardedPoints) {
-      showPointsToast('+100 points! Streak now going.');
+      showPointsToast(`+${res.pointsPerDay} points — day ${res.streakCurrent} of your streak.`);
+    } else if (res.revokedPoints) {
+      showPointsToast(`Back under ${res.threshold}% — today's ${res.pointsPerDay} points are on hold.`);
     }
   } catch (err) { alert(err.message); }
 }
@@ -460,7 +516,78 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelector('.nav-link[data-view="history"]').addEventListener('click', loadHistoryPage);
 });
 
+/* ------------------------------------------------------------------ */
+/* BMI calculator — gauge + full read-out                              */
+/* ------------------------------------------------------------------ */
 let lastBmiCalc = null; // holds {weightKg, heightCm, age, gender} once Calculate has run, for Save
+
+// The dial runs from BMI 12 to BMI 42 across a half circle.
+const BMI_SCALE_MIN = 12;
+const BMI_SCALE_MAX = 42;
+const BMI_BANDS = [
+  { from: 12,   to: 16,   color: '#A8402F', label: 'Severe thinness' },
+  { from: 16,   to: 17,   color: '#C2603F', label: 'Moderate thinness' },
+  { from: 17,   to: 18.5, color: '#D9A441', label: 'Mild thinness' },
+  { from: 18.5, to: 25,   color: '#3F7D58', label: 'Normal' },
+  { from: 25,   to: 30,   color: '#D9A441', label: 'Overweight' },
+  { from: 30,   to: 35,   color: '#D98A70', label: 'Obese class I' },
+  { from: 35,   to: 40,   color: '#B8452F', label: 'Obese class II' },
+  { from: 40,   to: 42,   color: '#7E2417', label: 'Obese class III' }
+];
+
+function bmiCategory(bmi) {
+  const band = BMI_BANDS.find(b => bmi >= b.from && bmi < b.to);
+  if (bmi < 12) return 'Severe thinness';
+  if (bmi >= 40) return 'Obese class III';
+  return band ? band.label : '—';
+}
+
+function bmiToAngle(bmi) {
+  const clamped = Math.max(BMI_SCALE_MIN, Math.min(BMI_SCALE_MAX, bmi));
+  return 180 * ((clamped - BMI_SCALE_MIN) / (BMI_SCALE_MAX - BMI_SCALE_MIN)); // 0 = left, 180 = right
+}
+
+// Point on the dial circle for a given angle (0° left, 180° right).
+function dialPoint(cx, cy, r, angleDeg) {
+  const rad = (Math.PI * (180 - angleDeg)) / 180;
+  return { x: cx + r * Math.cos(rad), y: cy - r * Math.sin(rad) };
+}
+
+function bandArc(cx, cy, rOuter, rInner, fromBmi, toBmi, color) {
+  const a1 = bmiToAngle(fromBmi), a2 = bmiToAngle(toBmi);
+  const o1 = dialPoint(cx, cy, rOuter, a1), o2 = dialPoint(cx, cy, rOuter, a2);
+  const i2 = dialPoint(cx, cy, rInner, a2), i1 = dialPoint(cx, cy, rInner, a1);
+  return `<path fill="${color}" d="M ${o1.x.toFixed(1)} ${o1.y.toFixed(1)}
+    A ${rOuter} ${rOuter} 0 0 1 ${o2.x.toFixed(1)} ${o2.y.toFixed(1)}
+    L ${i2.x.toFixed(1)} ${i2.y.toFixed(1)}
+    A ${rInner} ${rInner} 0 0 0 ${i1.x.toFixed(1)} ${i1.y.toFixed(1)} Z"/>`;
+}
+
+function bmiGaugeSvg(bmi) {
+  const cx = 170, cy = 168, rOuter = 148, rInner = 96;
+  const bands = BMI_BANDS.map(b => bandArc(cx, cy, rOuter, rInner, b.from, b.to, b.color)).join('');
+
+  const ticks = [16, 17, 18.5, 25, 30, 35, 40].map(v => {
+    const p = dialPoint(cx, cy, rOuter + 13, bmiToAngle(v));
+    return `<text x="${p.x.toFixed(1)}" y="${p.y.toFixed(1)}" text-anchor="middle" dominant-baseline="middle"
+              font-size="11" fill="#55594E">${v}</text>`;
+  }).join('');
+
+  const needle = dialPoint(cx, cy, rInner - 8, bmiToAngle(bmi));
+  const tail = dialPoint(cx, cy, 14, bmiToAngle(bmi) + 180);
+
+  return `
+  <svg viewBox="0 0 340 200" class="bmi-gauge" role="img" aria-label="BMI ${bmi}">
+    ${bands}
+    ${ticks}
+    <text x="42" y="196" font-size="10.5" fill="#6B6F63">Underweight</text>
+    <text x="170" y="34" text-anchor="middle" font-size="10.5" fill="#6B6F63">Normal</text>
+    <text x="298" y="196" text-anchor="end" font-size="10.5" fill="#6B6F63">Obesity</text>
+    <line x1="${tail.x.toFixed(1)}" y1="${tail.y.toFixed(1)}" x2="${needle.x.toFixed(1)}" y2="${needle.y.toFixed(1)}"
+          stroke="#16211D" stroke-width="3.5" stroke-linecap="round"/>
+    <circle cx="${cx}" cy="${cy}" r="8" fill="#16211D"/>
+  </svg>`;
+}
 
 function calculateBmi() {
   const errEl = document.getElementById('bmi-error');
@@ -470,7 +597,7 @@ function calculateBmi() {
   const age = parseInt(document.getElementById('age-input').value, 10) || null;
   const gender = document.getElementById('gender-input').value || '';
 
-  if (!weightKg || !heightCm) {
+  if (!weightKg || !heightCm || weightKg <= 0 || heightCm <= 0) {
     errEl.textContent = 'Enter both weight and height to calculate.';
     errEl.style.display = 'block';
     document.getElementById('bmi-result').innerHTML = '';
@@ -478,26 +605,60 @@ function calculateBmi() {
   }
 
   const m = heightCm / 100;
-  const bmi = Math.round((weightKg / (m * m)) * 10) / 10;
-  const band = bmi < 18.5 ? 'Underweight' : bmi < 25 ? 'Healthy range' : bmi < 30 ? 'Overweight' : 'Obese';
+  const raw = weightKg / (m * m);
+  const bmi = Math.round(raw * 10) / 10;
+  const category = bmiCategory(raw);
+  const inNormal = raw >= 18.5 && raw < 25;
+
   const minKg = Math.round(18.5 * m * m * 10) / 10;
-  const maxKg = Math.round(24.9 * m * m * 10) / 10;
+  const maxKg = Math.round(25 * m * m * 10) / 10;
+  const bmiPrime = Math.round((raw / 25) * 100) / 100;          // BMI ÷ upper normal limit
+  const ponderal = Math.round((weightKg / (m * m * m)) * 10) / 10; // kg/m³
 
   let note = '';
-  if (age && age < 18) note = 'BMI bands are calibrated for adults — for under-18s, a doctor\'s growth-chart read is more accurate than this number.';
-  else if (age && age > 65) note = 'For 65+, a slightly higher BMI is often protective — treat this as a rough guide, not a target.';
-  if (gender === 'female') note += (note ? ' ' : '') + 'Body-composition norms differ by sex; this range is a general guide, not tailored to you.';
+  if (age && age < 18) note = 'BMI bands here are the adult ones — under 18, a doctor\'s growth-chart reading is the accurate measure.';
+  else if (age && age > 65) note = 'Over 65, a slightly higher BMI is often protective — treat this as a rough guide, not a target.';
+  if (gender === 'female') note += (note ? ' ' : '') + 'Body composition differs by sex; this is a general guide, not tailored to you.';
 
   lastBmiCalc = { weightKg, heightCm, age, gender };
 
   document.getElementById('bmi-result').innerHTML = `
-    <div class="stat-grid two">
-      <div class="card stat-card"><div class="val">${bmi}</div><div class="lbl">BMI — ${band}</div></div>
-      <div class="card stat-card"><div class="val">${minKg}–${maxKg} kg</div><div class="lbl">Healthy range for your height</div></div>
+    <div class="bmi-result-grid">
+      <div class="bmi-gauge-wrap">
+        ${bmiGaugeSvg(raw)}
+        <div class="bmi-gauge-value">BMI = ${bmi}</div>
+      </div>
+      <div class="bmi-readout">
+        <div class="bmi-headline">
+          BMI = <strong>${bmi}</strong> kg/m²
+          <span class="bmi-cat ${inNormal ? 'ok' : 'warn'}">${esc(category)}</span>
+        </div>
+        <ul class="bmi-facts">
+          <li><span>Healthy BMI range</span><b>18.5 – 25 kg/m²</b></li>
+          <li><span>Healthy weight for your height</span><b>${minKg} – ${maxKg} kg</b></li>
+          <li><span>BMI Prime</span><b>${bmiPrime}</b></li>
+          <li><span>Ponderal Index</span><b>${ponderal} kg/m³</b></li>
+        </ul>
+      </div>
     </div>
-    ${note ? `<p class="hint" style="margin-top:10px;">${esc(note)}</p>` : ''}
-    <button class="btn btn-outline btn-sm" style="margin-top:12px;" onclick="saveBmiCalc()">💾 Save this</button>
-    <span class="hint" id="bmi-save-confirm" style="margin-left:10px;display:none;">Saved.</span>`;
+    ${note ? `<p class="hint" style="margin-top:12px;">${esc(note)}</p>` : ''}
+    <div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <button class="btn btn-outline btn-sm" onclick="saveBmiCalc()">💾 Save this</button>
+      <button class="btn-ghost btn-sm" onclick="clearBmi()">Clear</button>
+      <span class="hint" id="bmi-save-confirm" style="display:none;">Saved.</span>
+    </div>`;
+}
+
+function clearBmi() {
+  ['bmi-weight-input', 'height-input', 'age-input'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const g = document.getElementById('gender-input');
+  if (g) g.value = '';
+  document.getElementById('bmi-result').innerHTML = '';
+  document.getElementById('bmi-error').style.display = 'none';
+  lastBmiCalc = null;
 }
 
 async function saveBmiCalc() {

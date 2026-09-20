@@ -6,7 +6,9 @@ const {
   Alert, AlertRead, Message, Settings, TrackerSession, TrackerWaterEntry
 } = require('../models');
 const { requireAuth, requireRole } = require('../middleware/auth');
-const { buildChecklistItems, recalcCompletion } = require('../utils/helpers');
+const { buildChecklistItems } = require('../utils/helpers');
+// Points/streak are DERIVED here, never incremented — see utils/scoring.js
+const { applyScoring, completionOf, COMPLETION_THRESHOLD, POINTS_PER_DAY } = require('../utils/scoring');
 const { Op } = require('sequelize');
 
 const router = express.Router();
@@ -82,11 +84,10 @@ router.get('/dashboard', requireActive, async (req, res) => {
 
   const day = user.currentChallengeDay();
   const { regimen, log } = await syncChecklistWithRegimen(user, day);
-  const completion = recalcCompletion(log.items);
-  if (completion !== log.completionPercent) {
-    log.completionPercent = completion;
-    await log.save();
-  }
+  // The coach may have added or removed items since the last tick, so the
+  // day is re-scored here too — that is what stops a day from keeping
+  // points it no longer earns.
+  const score = await applyScoring(user, day);
 
   res.json({
     planMode: 'protocol',
@@ -110,7 +111,12 @@ router.get('/dashboard', requireActive, async (req, res) => {
     checklist: {
       meals: log.items.filter(i => i.kind === 'meal'),
       habits: log.items.filter(i => i.kind === 'habit'),
-      completionPercent: log.completionPercent,
+      completionPercent: score.percent,
+      scoredDone: score.done,          // coach items ticked
+      scoredTotal: score.total,        // coach items assigned
+      threshold: COMPLETION_THRESHOLD, // % needed to bank the day
+      pointsPerDay: POINTS_PER_DAY,
+      dayScored: score.qualifies,
       waterMl: log.waterMl,
       waterEntries: log.waterEntries
     }
@@ -129,26 +135,31 @@ router.post('/checklist', requireActive, async (req, res) => {
     const item = await ChecklistItem.findByPk(itemId, { include: [{ model: ChecklistLog }] });
     if (!item || item.ChecklistLog.userId !== req.user.id) return res.status(404).json({ error: 'Item not found' });
 
+    const day = item.ChecklistLog.day;
+    const wasScored = item.ChecklistLog.streakCounted;
+
     item.done = !!done;
     await item.save();
 
-    const log = await getOrCreateChecklistLog(req.user.id, item.ChecklistLog.day);
-    const completion = recalcCompletion(log.items);
-    const crossedThreshold = completion >= 80 && log.completionPercent < 80 && !log.streakCounted;
-    log.completionPercent = completion;
+    // Recompute the day and the user's totals from the database. No
+    // `+= 100` anywhere: the day is either qualifying or it isn't, and
+    // the totals always match the rows.
+    const score = await applyScoring(req.user, day);
 
-    let awardedPoints = false;
-    if (crossedThreshold) {
-      log.streakCounted = true;
-      req.user.points += 100;
-      req.user.streakCurrent += 1;
-      if (req.user.streakCurrent > req.user.streakBest) req.user.streakBest = req.user.streakCurrent;
-      await req.user.save();
-      awardedPoints = true;
-    }
-    await log.save();
-
-    res.json({ item, completionPercent: log.completionPercent, awardedPoints });
+    res.json({
+      item,
+      completionPercent: score.percent,
+      scoredDone: score.done,
+      scoredTotal: score.total,
+      threshold: COMPLETION_THRESHOLD,
+      pointsPerDay: POINTS_PER_DAY,
+      dayScored: score.qualifies,
+      awardedPoints: score.qualifies && !wasScored,   // just crossed the line
+      revokedPoints: !score.qualifies && wasScored,   // just dropped back under it
+      points: score.points,
+      streakCurrent: score.streakCurrent,
+      streakBest: score.streakBest
+    });
   } catch (err) {
     res.status(500).json({ error: 'Could not update checklist item', detail: err.message });
   }
@@ -561,10 +572,25 @@ router.get('/progress', requireActive, async (req, res) => {
     const longestFastHours = sessions.length ? Math.max(...sessions.map(s => (new Date(s.endAt) - new Date(s.startAt)) / 3600000)) : 0;
     return res.json({ planMode: 'tracker', totalFasts: sessions.length, currentStreak, longestFastHours: Math.round(longestFastHours * 10) / 10 });
   }
+  // Re-derive before reporting, so the strip can never show a stale
+  // points total left behind by an older version of the scoring code.
+  const day = user.currentChallengeDay();
+  const score = await applyScoring(user, day);
+
   res.json({
     planMode: 'protocol',
-    points: user.points, streakCurrent: user.streakCurrent, streakBest: user.streakBest,
-    day: user.currentChallengeDay(), challengeLengthDays: user.challengeLengthDays
+    points: score.points,
+    streakCurrent: score.streakCurrent,
+    streakBest: score.streakBest,
+    day,
+    challengeLengthDays: user.challengeLengthDays,
+    // today's checklist — drives the progress bar on the Today page
+    todayPercent: score.percent,
+    todayDone: score.done,
+    todayTotal: score.total,
+    todayScored: score.qualifies,
+    threshold: COMPLETION_THRESHOLD,
+    pointsPerDay: POINTS_PER_DAY
   });
 });
 
