@@ -88,17 +88,32 @@ async function loadProgress() {
   try {
     const p = await apiRequest('/client/progress');
     const el = document.getElementById('progress-strip');
+    const barsEl = document.getElementById('progress-bars');
     if (p.planMode === 'tracker') {
       el.innerHTML = `
         <div class="p-item"><div class="p-num">${p.totalFasts}</div><div class="p-lbl">Fasts logged</div></div>
         <div class="p-item"><div class="p-num">${p.currentStreak}</div><div class="p-lbl">Day streak</div></div>
         <div class="p-item"><div class="p-num">${p.longestFastHours}h</div><div class="p-lbl">Longest fast</div></div>`;
+      barsEl.style.display = 'none';
     } else {
       el.innerHTML = `
         <div class="p-item"><div class="p-num">${p.streakCurrent}</div><div class="p-lbl">Current streak</div></div>
         <div class="p-item"><div class="p-num">${p.streakBest}</div><div class="p-lbl">Best streak</div></div>
         <div class="p-item"><div class="p-num">${p.points}</div><div class="p-lbl">Points</div></div>
         <div class="p-item"><div class="p-num">${p.day}/${p.challengeLengthDays}</div><div class="p-lbl">Day</div></div>`;
+
+      const journeyPct = p.challengeLengthDays ? Math.min(100, Math.round((p.day / p.challengeLengthDays) * 100)) : 0;
+      const todayPct = (dashboardData && dashboardData.checklist) ? dashboardData.checklist.completionPercent : 0;
+      barsEl.innerHTML = `
+        <div class="bar-row">
+          <div class="bar-row-label"><span>Today's checklist</span><span>${todayPct}%</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:${todayPct}%;"></div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-row-label"><span>55-day journey</span><span>Day ${p.day} of ${p.challengeLengthDays}</span></div>
+          <div class="bar-track"><div class="bar-fill bar-fill-journey" style="width:${journeyPct}%;"></div></div>
+        </div>`;
+      barsEl.style.display = 'block';
     }
     el.style.display = 'flex';
   } catch (err) { /* not active yet — leave the strip hidden */ }
@@ -154,9 +169,26 @@ function renderWater() {
 async function toggleItem(itemId, done) {
   try {
     const res = await apiRequest('/client/checklist', { method: 'POST', body: { itemId, done } });
-    if (res.awardedPoints) { /* streak/points updated server-side */ }
     await loadDashboard();
+    await loadProgress(); // streak/points just changed server-side — refresh the strip
+    if (res.awardedPoints) {
+      showPointsToast('+100 points! Streak now going.');
+    }
   } catch (err) { alert(err.message); }
+}
+
+function showPointsToast(msg) {
+  let el = document.getElementById('points-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'points-toast';
+    el.className = 'points-toast';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(window._pointsToastTimer);
+  window._pointsToastTimer = setTimeout(() => el.classList.remove('show'), 2600);
 }
 
 function openAddItem(kind) {
@@ -195,6 +227,8 @@ async function deleteItem(id) {
   try {
     await apiRequest(`/client/checklist/items/${id}`, { method: 'DELETE' });
     await loadDashboard();
+    await loadProgress(); // a deleted CUSTOM item never affected points, but a
+                           // deleted coach item can change completion% — refresh
   } catch (err) { alert(err.message); }
 }
 
@@ -410,22 +444,73 @@ async function loadHistoryPage() {
         <span>${w.weightKg} kg — ${new Date(w.date).toLocaleDateString()}</span>
         <button class="btn-ghost btn-sm" onclick="deleteWeight(${w.id})">Delete</button>
       </div>`).join('') || '<p class="hint">No entries yet.</p>';
-    renderBmi(data.bmi, data.healthyWeightRange);
+
+    // Pre-fill the calculator with whatever we already know, so returning
+    // to this page doesn't make the person retype everything.
+    const latestWeight = data.weightLogs && data.weightLogs.length ? data.weightLogs[data.weightLogs.length - 1].weightKg : '';
+    if (latestWeight) document.getElementById('bmi-weight-input').value = latestWeight;
+    if (currentUser.heightCm) document.getElementById('height-input').value = currentUser.heightCm;
+    if (currentUser.age) document.getElementById('age-input').value = currentUser.age;
+    if (currentUser.gender) document.getElementById('gender-input').value = currentUser.gender;
+
+    document.getElementById('bmi-result').innerHTML = '';
   } catch (err) { /* ignore if not active yet */ }
 }
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelector('.nav-link[data-view="history"]').addEventListener('click', loadHistoryPage);
 });
 
-function renderBmi(bmi, range) {
-  const el = document.getElementById('bmi-result');
-  if (!bmi) { el.innerHTML = '<p class="hint">Log a weight and your height to see BMI.</p>'; return; }
+let lastBmiCalc = null; // holds {weightKg, heightCm, age, gender} once Calculate has run, for Save
+
+function calculateBmi() {
+  const errEl = document.getElementById('bmi-error');
+  errEl.style.display = 'none';
+  const weightKg = parseFloat(document.getElementById('bmi-weight-input').value);
+  const heightCm = parseFloat(document.getElementById('height-input').value);
+  const age = parseInt(document.getElementById('age-input').value, 10) || null;
+  const gender = document.getElementById('gender-input').value || '';
+
+  if (!weightKg || !heightCm) {
+    errEl.textContent = 'Enter both weight and height to calculate.';
+    errEl.style.display = 'block';
+    document.getElementById('bmi-result').innerHTML = '';
+    return;
+  }
+
+  const m = heightCm / 100;
+  const bmi = Math.round((weightKg / (m * m)) * 10) / 10;
   const band = bmi < 18.5 ? 'Underweight' : bmi < 25 ? 'Healthy range' : bmi < 30 ? 'Overweight' : 'Obese';
-  el.innerHTML = `
+  const minKg = Math.round(18.5 * m * m * 10) / 10;
+  const maxKg = Math.round(24.9 * m * m * 10) / 10;
+
+  let note = '';
+  if (age && age < 18) note = 'BMI bands are calibrated for adults — for under-18s, a doctor\'s growth-chart read is more accurate than this number.';
+  else if (age && age > 65) note = 'For 65+, a slightly higher BMI is often protective — treat this as a rough guide, not a target.';
+  if (gender === 'female') note += (note ? ' ' : '') + 'Body-composition norms differ by sex; this range is a general guide, not tailored to you.';
+
+  lastBmiCalc = { weightKg, heightCm, age, gender };
+
+  document.getElementById('bmi-result').innerHTML = `
     <div class="stat-grid two">
       <div class="card stat-card"><div class="val">${bmi}</div><div class="lbl">BMI — ${band}</div></div>
-      <div class="card stat-card"><div class="val">${range ? `${range.minKg}–${range.maxKg} kg` : '—'}</div><div class="lbl">Healthy range for your height</div></div>
-    </div>`;
+      <div class="card stat-card"><div class="val">${minKg}–${maxKg} kg</div><div class="lbl">Healthy range for your height</div></div>
+    </div>
+    ${note ? `<p class="hint" style="margin-top:10px;">${esc(note)}</p>` : ''}
+    <button class="btn btn-outline btn-sm" style="margin-top:12px;" onclick="saveBmiCalc()">💾 Save this</button>
+    <span class="hint" id="bmi-save-confirm" style="margin-left:10px;display:none;">Saved.</span>`;
+}
+
+async function saveBmiCalc() {
+  if (!lastBmiCalc) return;
+  try {
+    await apiRequest('/client/profile', { method: 'POST', body: {
+      heightCm: lastBmiCalc.heightCm, age: lastBmiCalc.age || undefined, gender: lastBmiCalc.gender || undefined
+    }});
+    await apiRequest('/client/weight', { method: 'POST', body: { weightKg: lastBmiCalc.weightKg } });
+    const confirmEl = document.getElementById('bmi-save-confirm');
+    if (confirmEl) { confirmEl.style.display = 'inline'; }
+    await loadHistoryPage();
+  } catch (err) { alert(err.message); }
 }
 
 async function logWeight() {
@@ -441,17 +526,6 @@ async function deleteWeight(id) {
   if (!confirm('Delete this entry?')) return;
   try { await apiRequest(`/client/weight/${id}`, { method: 'DELETE' }); await loadHistoryPage(); }
   catch (err) { alert(err.message); }
-}
-async function saveProfile() {
-  try {
-    const body = {
-      heightCm: parseFloat(document.getElementById('height-input').value) || undefined,
-      age: parseInt(document.getElementById('age-input').value, 10) || undefined,
-      gender: document.getElementById('gender-input').value || undefined
-    };
-    await apiRequest('/client/profile', { method: 'POST', body });
-    await loadHistoryPage();
-  } catch (err) { alert(err.message); }
 }
 
 /* ------------------------------------------------------------------ */

@@ -46,6 +46,43 @@ router.post('/register', async (req, res) => {
   }
 });
 
+// POST /api/auth/create-first-admin
+// One-shot bootstrap: creates the very first admin account, only if no
+// admin exists yet. Once any admin exists, this route permanently refuses.
+// This is the route the login page's "First time? Create admin account"
+// link calls — it makes an active admin instantly (no manual DB edit).
+router.post('/create-first-admin', async (req, res) => {
+  try {
+    const existingAdmin = await User.findOne({ where: { role: 'admin' } });
+    if (existingAdmin) {
+      return res.status(403).json({ error: 'An admin already exists. This endpoint is disabled.' });
+    }
+
+    const { name, email, password } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Name, email and password are required' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const admin = await User.create({
+      name,
+      email: email.toLowerCase(),
+      passwordHash,
+      role: 'admin',
+      status: 'active',
+      tier: 'none'
+    });
+
+    res.status(201).json({ user: admin.toSafeJSON() });
+  } catch (err) {
+    console.error('create-first-admin failed:', err);
+    res.status(500).json({ error: 'Could not create admin', detail: err.message });
+  }
+});
+
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   try {
@@ -76,10 +113,8 @@ router.get('/me', requireAuth, async (req, res) => {
 });
 
 // POST /api/auth/request-admin — creates a coach/admin account with a
-// properly bcrypt-hashed password (so it's never at risk of the "typed
-// straight into MySQL" problem), but leaves it in status='pending_approval'.
-// It CANNOT log in until you manually flip that one row's status to
-// 'active' in the database — nothing here activates it automatically.
+// properly bcrypt-hashed password, but leaves it in status='pending_approval'.
+// Kept as a fallback; the primary path is now /create-first-admin above.
 router.post('/request-admin', async (req, res) => {
   try {
     const { name, email, password } = req.body;

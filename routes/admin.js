@@ -5,7 +5,7 @@ const {
   User, WeightLog, Plan, Payment, Payout,
   Regimen, RegimenMeal, RegimenMilestone,
   ChecklistLog, ChecklistItem, WaterEntry,
-  Alert, AlertRead, Message, Settings, TrackerSession
+  Alert, AlertRead, Message, Settings, TrackerSession, TrackerWaterEntry
 } = require('../models');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { generateReferralCode } = require('../utils/helpers');
