@@ -77,6 +77,7 @@ function renderRoster() {
             ${c.status === 'pending_payment' ? `<button onclick="activateClient(${c.id})">Activate now</button>` : ''}
             ${c.planMode === 'protocol' ? `<button onclick="openAssignPlanModal(${c.id}, '${jsStr(c.name)}', ${c.day || 1})">Assign plan</button>` : ''}
             <button onclick="openAdminPauseModal(${c.id}, ${c.fastingPause.active})">${c.fastingPause.active ? 'Resume fasting' : 'Pause fasting'}</button>
+            <button onclick="openClientDetail(${c.id})">View details &amp; BMI</button>
             <button onclick="openResetPasswordModal(${c.id})">Reset password</button>
           </div>
         </div>
@@ -183,35 +184,128 @@ async function loadProtocolDefaults() {
     protocolDefaults.map(d => `<option value="${d.day}">Day ${d.day} — ${esc(d.label || d.phase)}</option>`).join('');
 }
 
-function openAssignPlanModal(clientId, name, suggestedDay) {
+let assignedDaysCache = [];
+
+async function openAssignPlanModal(clientId, name, suggestedDay) {
   document.getElementById('assign-client-id').value = clientId;
   document.getElementById('assign-client-name').textContent = name;
   document.getElementById('assign-day').value = suggestedDay || 1;
   document.getElementById('assign-day-preset').value = '';
-  document.getElementById('assign-fullfast').checked = false;
-  document.getElementById('assign-start').value = 9;
-  document.getElementById('assign-end').value = 17;
-  document.getElementById('assign-focus').value = '';
-  document.getElementById('assign-water').value = 3000;
+  document.getElementById('assign-error').style.display = 'none';
+  openModal('assign-plan-modal');
+  await loadAssignedDays(clientId);
+  // Load whatever is ALREADY assigned for this day instead of opening a
+  // blank form — that was the bug: re-opening Assign plan hid the plan
+  // the coach had just saved.
+  await loadAssignedDay();
+}
+
+async function loadAssignedDays(clientId) {
+  try {
+    const data = await apiRequest(`/admin/clients/${clientId}/assigned-days`);
+    assignedDaysCache = data.days || [];
+    const el = document.getElementById('assigned-days-strip');
+    if (!el) return;
+    el.innerHTML = assignedDaysCache.length
+      ? `<span class="hint">Already assigned:</span>` + assignedDaysCache.map(d =>
+          `<button class="day-chip ${d.day === data.currentDay ? 'current' : ''}"
+                   title="${esc(d.focus || '')}"
+                   onclick="jumpToDay(${d.day})">${d.day}</button>`).join('')
+      : '<span class="hint">No days assigned to this client yet.</span>';
+  } catch (err) { /* non-fatal */ }
+}
+
+function jumpToDay(day) {
+  document.getElementById('assign-day').value = day;
+  loadAssignedDay();
+}
+
+/**
+ * Pull the client's saved plan for the day now in the day box and fill
+ * the form with it. Falls back to the static 55-day default only when
+ * nothing has been assigned yet — so the coach always sees the real,
+ * current state first and the reference data second.
+ */
+async function loadAssignedDay() {
+  const clientId = document.getElementById('assign-client-id').value;
+  const day = parseInt(document.getElementById('assign-day').value, 10);
+  const statusEl = document.getElementById('assign-status');
+  if (!clientId || !day) return;
+
+  let data = { assigned: false, regimen: null };
+  try {
+    data = await apiRequest(`/admin/clients/${clientId}/regimen/${day}`);
+  } catch (err) { /* treat as unassigned */ }
+
   document.getElementById('assign-meals-rows').innerHTML = '';
   document.getElementById('assign-milestones-rows').innerHTML = '';
-  document.getElementById('assign-error').style.display = 'none';
+
+  if (data.assigned && data.regimen) {
+    const r = data.regimen;
+    document.getElementById('assign-fullfast').checked = !!r.isFullDayFast;
+    document.getElementById('assign-start').value = r.startHour;
+    document.getElementById('assign-end').value = r.endHour;
+    document.getElementById('assign-focus').value = r.focus || '';
+    document.getElementById('assign-water').value = r.waterTargetMl || 3000;
+    (r.meals || []).forEach(m => addMealRow(m.type, m.name, m.calories ?? ''));
+    (r.milestones || []).forEach(m => addMilestoneRow(m.label));
+    if (statusEl) {
+      statusEl.className = 'assign-status assigned';
+      statusEl.innerHTML = `<b>Currently assigned.</b> Last saved ${new Date(r.updatedAt).toLocaleString()}.
+        Edit below and apply again to overwrite, or
+        <button class="btn-ghost btn-sm" onclick="loadDayDefaultsInto(${day})">load the 55-day default instead</button>.`;
+    }
+  } else {
+    const d = protocolDefaults.find(x => x.day === day);
+    if (d) {
+      applyPresetObject(d);
+      if (statusEl) {
+        statusEl.className = 'assign-status unassigned';
+        statusEl.innerHTML = `<b>Not assigned yet.</b> Pre-filled from the 55-day default for day ${day}.`;
+      }
+    } else {
+      document.getElementById('assign-fullfast').checked = false;
+      document.getElementById('assign-start').value = 9;
+      document.getElementById('assign-end').value = 17;
+      document.getElementById('assign-focus').value = '';
+      document.getElementById('assign-water').value = 3000;
+      if (statusEl) {
+        statusEl.className = 'assign-status custom';
+        statusEl.innerHTML = `<b>Custom day ${day}.</b> There's no 55-day default for this day —
+          build it from scratch. Assigning a day beyond the client's current
+          length extends their programme automatically.`;
+      }
+    }
+  }
+  document.getElementById('assign-day-preset').value =
+    protocolDefaults.some(x => x.day === day) ? day : '';
   toggleAssignFullFast();
-  openModal('assign-plan-modal');
+}
+
+function loadDayDefaultsInto(day) {
+  const d = protocolDefaults.find(x => x.day === day);
+  if (!d) return alert('There is no 55-day default for that day.');
+  document.getElementById('assign-meals-rows').innerHTML = '';
+  document.getElementById('assign-milestones-rows').innerHTML = '';
+  applyPresetObject(d);
+  const statusEl = document.getElementById('assign-status');
+  statusEl.className = 'assign-status unassigned';
+  statusEl.innerHTML = `<b>Loaded the 55-day default for day ${day}.</b> Nothing is saved until you apply.`;
 }
 
 function fillDayDefaults() {
-  const day = parseInt(document.getElementById('assign-day').value, 10);
-  const preset = document.getElementById('assign-day-preset');
-  preset.value = protocolDefaults.some(d => d.day === day) ? day : '';
-  if (preset.value) applyPreset();
+  // Day box changed — reload what that day actually holds.
+  loadAssignedDay();
 }
 
 function applyPreset() {
   const day = parseInt(document.getElementById('assign-day-preset').value, 10);
-  const d = protocolDefaults.find(x => x.day === day);
-  if (!d) return;
-  document.getElementById('assign-day').value = d.day;
+  if (!day) return;
+  document.getElementById('assign-day').value = day;
+  loadAssignedDay();
+}
+
+function applyPresetObject(d) {
   document.getElementById('assign-fullfast').checked = !!d.isFullDayFast;
   document.getElementById('assign-start').value = d.startHour ?? 9;
   document.getElementById('assign-end').value = d.endHour ?? 17;
@@ -221,7 +315,8 @@ function applyPreset() {
 }
 
 function toggleAssignFullFast() {
-  document.getElementById('assign-window-fields').style.display = document.getElementById('assign-fullfast').checked ? 'none' : 'flex';
+  document.getElementById('assign-window-fields').style.display =
+    document.getElementById('assign-fullfast').checked ? 'none' : 'flex';
 }
 
 // Quick-add library: purely a convenience for the coach — picking one just
@@ -269,7 +364,7 @@ async function submitAssignPlan(applyAll) {
   try {
     const isFullDayFast = document.getElementById('assign-fullfast').checked;
     const day = parseInt(document.getElementById('assign-day').value, 10);
-    if (!day) throw new Error('Pick a day between 1 and 55');
+    if (!day || day < 1) throw new Error('Enter a day number of 1 or higher.');
 
     const meals = [...document.querySelectorAll('#assign-meals-rows .meal-row')].map(r => ({
       type: r.querySelector('.meal-type').value,
@@ -299,7 +394,10 @@ async function submitAssignPlan(applyAll) {
     } else {
       const clientId = document.getElementById('assign-client-id').value;
       await apiRequest(`/admin/clients/${clientId}/assign-plan`, { method: 'POST', body });
-      closeModal('assign-plan-modal');
+      await loadAssignedDays(clientId);
+      const statusEl = document.getElementById('assign-status');
+      statusEl.className = 'assign-status assigned';
+      statusEl.innerHTML = `<b>Saved.</b> Day ${day} is now assigned — re-opening this window will show it.`;
     }
     await loadRoster();
   } catch (err) {
@@ -550,4 +648,52 @@ async function saveSettings() {
   fields.forEach(f => body[f] = document.getElementById(`set-${f}`).value);
   try { await apiRequest('/admin/settings', { method: 'PUT', body }); alert('Saved.'); }
   catch (err) { alert(err.message); }
+}
+
+/* ------------------------------------------------------------------ */
+/* Client detail — including the body metrics the client saved from     */
+/* their BMI calculator. The coach could not see any of this before.    */
+/* ------------------------------------------------------------------ */
+async function openClientDetail(id) {
+  openModal('client-detail-modal');
+  const el = document.getElementById('client-detail-body');
+  el.innerHTML = '<p class="hint">Loading…</p>';
+  try {
+    const d = await apiRequest(`/admin/clients/${id}`);
+    const c = d.client, b = d.body || {};
+    const bmiBand = b.bmi === null || b.bmi === undefined ? null
+      : b.bmi < 18.5 ? 'Underweight' : b.bmi < 25 ? 'Normal' : b.bmi < 30 ? 'Overweight' : 'Obese';
+
+    document.getElementById('client-detail-name').textContent = c.name;
+    el.innerHTML = `
+      <div class="detail-grid">
+        <div class="detail-cell"><span>Status</span><b>${esc(c.status)}</b></div>
+        <div class="detail-cell"><span>Plan</span><b>${esc(c.tier || '—')} · ${esc(c.planMode)}</b></div>
+        <div class="detail-cell"><span>Day</span><b>${c.challengeStartDate ? `${d.checklistLogs.length ? '' : ''}${c.challengeLengthDays} day programme` : 'Not started'}</b></div>
+        <div class="detail-cell"><span>Points</span><b>${c.points} · streak ${c.streakCurrent}</b></div>
+      </div>
+
+      <h4 class="detail-head">Body metrics</h4>
+      ${b.heightCm || b.currentWeightKg ? `
+        <div class="detail-grid">
+          <div class="detail-cell"><span>Height</span><b>${b.heightCm ? b.heightCm + ' cm' : '—'}</b></div>
+          <div class="detail-cell"><span>Age / gender</span><b>${b.age || '—'} ${b.gender ? '· ' + esc(b.gender) : ''}</b></div>
+          <div class="detail-cell"><span>Current weight</span><b>${b.currentWeightKg ? b.currentWeightKg + ' kg' : '—'}</b></div>
+          <div class="detail-cell"><span>Since start</span><b>${b.changeKg === null ? '—' : `${b.changeKg > 0 ? '+' : ''}${b.changeKg} kg`}</b></div>
+          <div class="detail-cell"><span>BMI</span><b>${b.bmi ?? '—'} ${bmiBand ? `<span class="badge badge-${bmiBand === 'Normal' ? 'active' : 'pending'}">${bmiBand}</span>` : ''}</b></div>
+          <div class="detail-cell"><span>Healthy range</span><b>${b.healthyWeightRange ? `${b.healthyWeightRange.minKg}–${b.healthyWeightRange.maxKg} kg` : '—'}</b></div>
+        </div>` : '<p class="hint">This client has not saved a height or weight yet — they enter it from History &amp; weight → BMI calculator.</p>'}
+
+      <h4 class="detail-head">Weight log</h4>
+      ${d.weightLogs.length ? `<div class="detail-log">${d.weightLogs.slice().reverse().slice(0, 12).map(w =>
+        `<div class="confirm-row"><span>${new Date(w.date).toLocaleDateString()}</span><b>${w.weightKg} kg</b></div>`).join('')}</div>`
+        : '<p class="hint">No weight entries yet.</p>'}
+
+      <h4 class="detail-head">Assigned days</h4>
+      ${d.regimens.length ? `<div class="chip-row">${d.regimens.map(r =>
+        `<span class="day-chip static" title="${esc(r.focus || '')}">${r.day}</span>`).join('')}</div>`
+        : '<p class="hint">No plan days assigned yet.</p>'}`;
+  } catch (err) {
+    el.innerHTML = `<p class="error-text">${esc(err.message)}</p>`;
+  }
 }

@@ -88,7 +88,19 @@ router.get('/clients/:id', async (req, res) => {
     include: [{ model: RegimenMeal, as: 'meals' }, { model: RegimenMilestone, as: 'milestones' }]
   });
   const checklistLogs = await ChecklistLog.findAll({ where: { userId: client.id }, order: [['day', 'ASC']] });
-  res.json({ client: client.toSafeJSON(), weightLogs, regimens, checklistLogs });
+  const latest = weightLogs.length ? weightLogs[weightLogs.length - 1].weightKg : null;
+  const first = weightLogs.length ? weightLogs[0].weightKg : null;
+  res.json({
+    client: client.toSafeJSON(), weightLogs, regimens, checklistLogs,
+    // Body metrics the client saved from their BMI calculator. Read-only
+    // here — the coach sees it, the client owns it.
+    body: {
+      heightCm: client.heightCm, age: client.age, gender: client.gender,
+      currentWeightKg: latest, startWeightKg: first,
+      changeKg: latest !== null && first !== null ? Math.round((latest - first) * 10) / 10 : null,
+      bmi: client.bmi(latest), healthyWeightRange: client.healthyWeightRange()
+    }
+  });
 });
 
 router.post('/clients/:id/activate', async (req, res) => {
@@ -152,6 +164,64 @@ router.get('/meal-presets', (req, res) => {
   res.json({ presets: MEAL_PRESETS });
 });
 
+// GET /api/admin/clients/:id/regimen/:day
+// What the client ACTUALLY has assigned for that day, so re-opening
+// "Assign plan" shows the last saved plan instead of a blank form.
+router.get('/clients/:id/regimen/:day', async (req, res) => {
+  try {
+    const regimen = await Regimen.findOne({
+      where: { userId: req.params.id, day: req.params.day },
+      include: [{ model: RegimenMeal, as: 'meals' }, { model: RegimenMilestone, as: 'milestones' }]
+    });
+    if (!regimen) return res.json({ regimen: null, assigned: false });
+    res.json({
+      assigned: true,
+      regimen: {
+        day: regimen.day, startHour: regimen.startHour, endHour: regimen.endHour,
+        isFullDayFast: regimen.isFullDayFast, protocolType: regimen.protocolType,
+        phase: regimen.phase, focus: regimen.focus, waterTargetMl: regimen.waterTargetMl,
+        updatedAt: regimen.updatedAt,
+        meals: regimen.meals.map(m => ({ type: m.type, name: m.name, calories: m.calories })),
+        milestones: regimen.milestones.map(m => ({ itemKey: m.itemKey, label: m.label }))
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not load the assigned plan', detail: err.message });
+  }
+});
+
+// GET /api/admin/clients/:id/assigned-days — day numbers already assigned,
+// so the coach can see at a glance what is filled in and what is not.
+router.get('/clients/:id/assigned-days', async (req, res) => {
+  const rows = await Regimen.findAll({
+    where: { userId: req.params.id }, order: [['day', 'ASC']],
+    attributes: ['day', 'isFullDayFast', 'focus', 'updatedAt']
+  });
+  const client = await User.findByPk(req.params.id);
+  res.json({
+    days: rows,
+    currentDay: client ? client.currentChallengeDay() : 0,
+    challengeLengthDays: client ? client.challengeLengthDays : 55
+  });
+});
+
+// PATCH /api/admin/clients/:id — coach-editable client facts, including
+// the challenge length (needed when assigning a day past the 55th).
+router.patch('/clients/:id', async (req, res) => {
+  try {
+    const client = await User.findOne({ where: { id: req.params.id, role: 'client' } });
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+    for (const f of ['challengeLengthDays', 'heightCm', 'age', 'gender', 'timezone']) {
+      if (req.body[f] !== undefined && req.body[f] !== null && req.body[f] !== '') client[f] = req.body[f];
+    }
+    if (req.body.challengeStartDate) client.challengeStartDate = req.body.challengeStartDate;
+    await client.save();
+    res.json({ client: client.toSafeJSON() });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not update client', detail: err.message });
+  }
+});
+
 async function writeRegimen(userId, payload) {
   const { day, startHour, endHour, isFullDayFast, protocolType, phase, focus, waterTargetMl, meals, milestones } = payload;
 
@@ -185,10 +255,18 @@ router.post('/clients/:id/assign-plan', async (req, res) => {
     const client = await User.findOne({ where: { id: req.params.id, role: 'client' } });
     if (!client) return res.status(404).json({ error: 'Client not found' });
     if (client.planMode !== 'protocol') return res.status(400).json({ error: 'This client is on the Fasting Tracker plan and has no coach-assigned regimen.' });
-    if (!req.body.day) return res.status(400).json({ error: 'day is required' });
+    const day = parseInt(req.body.day, 10);
+    if (!day || day < 1) return res.status(400).json({ error: 'day must be 1 or higher' });
 
-    const regimen = await writeRegimen(client.id, req.body);
-    res.json({ regimen });
+    // Custom days: assigning past the end of the challenge simply extends
+    // it, so the coach is never boxed in by the original 55.
+    if (day > client.challengeLengthDays) {
+      client.challengeLengthDays = day;
+      await client.save();
+    }
+
+    const regimen = await writeRegimen(client.id, { ...req.body, day });
+    res.json({ regimen, challengeLengthDays: client.challengeLengthDays });
   } catch (err) {
     res.status(500).json({ error: 'Could not assign plan', detail: err.message });
   }
@@ -197,10 +275,12 @@ router.post('/clients/:id/assign-plan', async (req, res) => {
 // POST /api/admin/assign-plan/apply-all  — push the same day to every active protocol client
 router.post('/assign-plan/apply-all', async (req, res) => {
   try {
-    if (!req.body.day) return res.status(400).json({ error: 'day is required' });
+    const day = parseInt(req.body.day, 10);
+    if (!day || day < 1) return res.status(400).json({ error: 'day must be 1 or higher' });
     const clients = await User.findAll({ where: { role: 'client', planMode: 'protocol', status: 'active' } });
     for (const c of clients) {
-      await writeRegimen(c.id, req.body);
+      if (day > c.challengeLengthDays) { c.challengeLengthDays = day; await c.save(); }
+      await writeRegimen(c.id, { ...req.body, day });
     }
     res.json({ applied: clients.length });
   } catch (err) {

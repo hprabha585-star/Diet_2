@@ -6,6 +6,7 @@ const { connectDB, sequelize } = require('./config/db');
 const authRoutes = require('./routes/auth');
 const clientRoutes = require('./routes/client');
 const adminRoutes = require('./routes/admin');
+const trackerRoutes = require('./routes/tracker');
 const { Plan } = require('./models');
 
 const app = express();
@@ -62,6 +63,9 @@ app.get('/api/plans', async (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/client', clientRoutes);
 app.use('/api/admin', adminRoutes);
+// Fasting Tracker (tracker-mode plans only) — its own router so the
+// coached client routes stay untouched.
+app.use('/api/tracker', trackerRoutes);
 
 // Hostinger runs one Node app — the frontend is served from the same
 // process, same origin, so there is no CORS/CLIENT_ORIGIN config anymore

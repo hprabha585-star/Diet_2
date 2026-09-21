@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#16211D">
+<title>FastCoach — Fasting Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/tokens.css">
+<link rel="stylesheet" href="../css/dashboard.css">
+<link rel="stylesheet" href="../css/tracker.css">
+</head>
+<body>
+
+<div class="app-shell">
+  <div class="sidebar-scrim" id="sidebar-scrim" onclick="closeSidebar()"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-top">
+      <div class="brand">FastCoach</div>
+      <div class="role-tag">Fasting Tracker</div>
+    </div>
+    <nav>
+      <div class="nav-group">Fasting</div>
+      <a href="#today" class="nav-link active" data-view="today"><span class="ico">◉</span><span>Today</span></a>
+      <a href="#fast" class="nav-link" data-view="fast"><span class="ico">◔</span><span>Current fast</span></a>
+      <a href="#schedule" class="nav-link" data-view="schedule"><span class="ico">⧗</span><span>Schedule</span></a>
+      <a href="#history" class="nav-link" data-view="history"><span class="ico">☷</span><span>History</span></a>
+      <a href="#stats" class="nav-link" data-view="stats"><span class="ico">▤</span><span>Statistics</span></a>
+      <a href="#calendar" class="nav-link" data-view="calendar"><span class="ico">▦</span><span>Calendar</span></a>
+
+      <div class="nav-group">Nutrition</div>
+      <a href="#nutrition" class="nav-link" data-view="nutrition"><span class="ico">◍</span><span>Meals &amp; macros</span></a>
+
+      <div class="nav-group">Hydration</div>
+      <a href="#water" class="nav-link" data-view="water"><span class="ico">◈</span><span>Water</span></a>
+
+      <div class="nav-group">Learn</div>
+      <a href="#stages" class="nav-link" data-view="stages"><span class="ico">◐</span><span>Fasting stages</span></a>
+      <a href="#learn" class="nav-link" data-view="learn"><span class="ico">✎</span><span>Education</span></a>
+      <a href="#tasks" class="nav-link" data-view="tasks"><span class="ico">✓</span><span>Daily tasks</span></a>
+
+      <div class="nav-group">Account</div>
+      <a href="#settings" class="nav-link" data-view="settings"><span class="ico">⚙</span><span>Settings</span></a>
+      <a href="/client/dashboard.html" class="nav-link"><span class="ico">←</span><span>Main dashboard</span></a>
+    </nav>
+    <div class="sidebar-foot">
+      <button class="logout-btn" onclick="logout()">Log out</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <button class="hamburger" onclick="openSidebar()" aria-label="Open menu">☰</button>
+      <h1 id="topbar-title">Today</h1>
+      <div class="topbar-right">
+        <span class="streak-chip" id="streak-chip" hidden></span>
+        <div id="user-chip" class="user-chip"></div>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="notice notice-warn card" id="locked-notice" style="display:none;">
+        <div>
+          <strong>The Fasting Tracker isn't unlocked on your account.</strong>
+          <p id="locked-reason">Pick up the Fasting Tracker plan from the Payment page to use this section.</p>
+          <a class="btn btn-primary btn-sm" href="/client/dashboard.html#payment" style="margin-top:10px;">Go to Payment</a>
+        </div>
+      </div>
+
+      <div id="tracker-app" style="display:none;">
+
+        <!-- ============ TODAY ============ -->
+        <section class="view active" id="view-today">
+          <div id="today-tip" class="tip-banner" hidden></div>
+          <div class="hero-grid-2">
+            <div class="card fast-hero" id="today-fast-hero"></div>
+            <div class="today-side">
+              <div class="card stat-tile" id="tile-streak"></div>
+              <div class="card stat-tile" id="tile-goal"></div>
+            </div>
+          </div>
+
+          <div class="tile-grid" id="today-tiles"></div>
+
+          <div class="section-title">This week</div>
+          <div class="card" id="today-weekly"></div>
+
+          <div class="section-title">Today's tasks</div>
+          <div class="card" id="today-tasks"></div>
+        </section>
+
+        <!-- ============ CURRENT FAST ============ -->
+        <section class="view" id="view-fast">
+          <div id="fast-panel"></div>
+          <div class="section-title">Where you are now</div>
+          <div class="card" id="fast-stage-panel"></div>
+        </section>
+
+        <!-- ============ SCHEDULE ============ -->
+        <section class="view" id="view-schedule">
+          <div class="page-intro">
+            <h2>Choose your fasting schedule</h2>
+            <p>You can change this whenever you like — it only sets the default for your next fast.</p>
+          </div>
+          <div class="field start-hour-field">
+            <label>Suggested daily start time</label>
+            <input type="time" id="sched-start-time" onchange="reloadSchedules()">
+            <div class="hint">Every schedule below is worked out from this time.</div>
+          </div>
+          <div class="schedule-grid" id="schedule-grid"></div>
+
+          <div class="card custom-sched" id="custom-schedule-card"></div>
+
+          <div class="section-title">Weekly plan</div>
+          <p class="hint" style="margin-bottom:12px;">Different days can run different schedules, and any day can be a rest day.</p>
+          <div class="card" id="weekly-editor"></div>
+        </section>
+
+        <!-- ============ HISTORY ============ -->
+        <section class="view" id="view-history">
+          <div class="page-intro"><h2>Fasting history</h2></div>
+          <div id="history-list"></div>
+        </section>
+
+        <!-- ============ STATISTICS ============ -->
+        <section class="view" id="view-stats">
+          <div class="range-tabs">
+            <button class="range-tab active" data-range="week" onclick="setStatsRange('week')">Week</button>
+            <button class="range-tab" data-range="month" onclick="setStatsRange('month')">Month</button>
+            <button class="range-tab" data-range="all" onclick="setStatsRange('all')">All time</button>
+          </div>
+          <div class="tile-grid" id="stats-grid"></div>
+          <div class="section-title">Weekly progress</div>
+          <div class="card" id="stats-weekly"></div>
+        </section>
+
+        <!-- ============ CALENDAR ============ -->
+        <section class="view" id="view-calendar">
+          <div class="cal-head">
+            <button class="btn-ghost btn-sm" onclick="shiftMonth(-1)">‹ Prev</button>
+            <h2 id="cal-title"></h2>
+            <button class="btn-ghost btn-sm" onclick="shiftMonth(1)">Next ›</button>
+          </div>
+          <div class="card">
+            <div class="cal-grid" id="cal-grid"></div>
+            <div class="cal-legend">
+              <span><i class="dot completed"></i>Completed</span>
+              <span><i class="dot partial"></i>Ended early</span>
+              <span><i class="dot active"></i>Active</span>
+              <span><i class="dot rest"></i>Rest day</span>
+              <span><i class="dot none"></i>No session</span>
+            </div>
+          </div>
+          <div class="card" id="cal-detail" style="margin-top:16px;"></div>
+        </section>
+
+        <!-- ============ NUTRITION ============ -->
+        <section class="view" id="view-nutrition">
+          <div class="page-intro"><h2>Meals &amp; macros</h2><p id="nutrition-date-label"></p></div>
+          <div class="card" id="macro-card"></div>
+          <div class="quick-meal-row">
+            <button class="btn btn-outline btn-sm" onclick="openMealModal('breakfast')">+ Breakfast</button>
+            <button class="btn btn-outline btn-sm" onclick="openMealModal('lunch')">+ Lunch</button>
+            <button class="btn btn-outline btn-sm" onclick="openMealModal('dinner')">+ Dinner</button>
+            <button class="btn btn-outline btn-sm" onclick="openMealModal('snack')">+ Snack</button>
+          </div>
+          <div id="meals-by-category"></div>
+        </section>
+
+        <!-- ============ WATER ============ -->
+        <section class="view" id="view-water">
+          <div class="page-intro"><h2>Hydration</h2></div>
+          <div class="card water-card" id="water-card"></div>
+          <div class="section-title">This week</div>
+          <div class="card" id="water-history"></div>
+          <div class="section-title">Reminders</div>
+          <div class="card" id="water-reminders"></div>
+        </section>
+
+        <!-- ============ STAGES ============ -->
+        <section class="view" id="view-stages">
+          <div class="page-intro">
+            <h2>Fasting stages</h2>
+            <p>What generally happens as a fast goes on. People differ — treat this as background, not a prediction.</p>
+          </div>
+          <div id="stages-list"></div>
+        </section>
+
+        <!-- ============ EDUCATION ============ -->
+        <section class="view" id="view-learn">
+          <div class="page-intro"><h2>Learn about fasting</h2></div>
+          <div id="learn-index" class="learn-grid"></div>
+          <div id="learn-article" class="card" style="display:none;"></div>
+          <div class="card safety-card" id="safety-card"></div>
+        </section>
+
+        <!-- ============ TASKS ============ -->
+        <section class="view" id="view-tasks">
+          <div class="page-intro"><h2>Daily tasks</h2><p>Small things worth doing today.</p></div>
+          <div class="card" id="tasks-list"></div>
+          <div class="section-title">Tip of the day</div>
+          <div class="card" id="tips-card"></div>
+        </section>
+
+        <!-- ============ SETTINGS ============ -->
+        <section class="view" id="view-settings">
+          <div class="page-intro"><h2>Tracker settings</h2></div>
+          <div class="card" id="settings-card"></div>
+        </section>
+
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- START FAST modal -->
+<div class="modal-backdrop" id="start-fast-modal">
+  <div class="modal">
+    <div class="modal-head"><h3>Start fast</h3><button class="modal-close" onclick="closeModal('start-fast-modal')">×</button></div>
+    <div class="confirm-block" id="start-confirm-block"></div>
+    <div class="field"><label>Schedule</label><select id="start-schedule"></select></div>
+    <div style="display:flex;gap:10px;">
+      <div class="field" style="flex:1;"><label>Fasting hours</label><input type="number" id="start-target" step="0.5" min="1" max="72"></div>
+      <div class="field" style="flex:1;"><label>Eating window (hours)</label><input type="number" id="start-eating" step="0.5" min="1" max="23"></div>
+    </div>
+    <div class="field"><label>Start time</label><input type="datetime-local" id="start-at"></div>
+    <div class="error-text" id="start-error" style="display:none;"></div>
+    <button class="btn btn-primary" style="width:100%;" onclick="confirmStartFast()">Confirm &amp; start fast</button>
+  </div>
+</div>
+
+<!-- END FAST modal -->
+<div class="modal-backdrop" id="end-fast-modal">
+  <div class="modal">
+    <div class="modal-head"><h3>End your fast?</h3><button class="modal-close" onclick="closeModal('end-fast-modal')">×</button></div>
+    <div id="end-summary"></div>
+    <label class="check-line"><input type="checkbox" id="end-start-eating" checked> Start my eating window now</label>
+    <div class="field"><label>Note (optional)</label><input type="text" id="end-note" placeholder="How did it go?"></div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-primary btn-sm" style="flex:1;" onclick="confirmEndFast()">End fast</button>
+      <button class="btn btn-outline btn-sm" style="flex:1;" onclick="closeModal('end-fast-modal')">Continue fasting</button>
+    </div>
+  </div>
+</div>
+
+<!-- MEAL modal -->
+<div class="modal-backdrop" id="meal-modal">
+  <div class="modal">
+    <div class="modal-head"><h3 id="meal-modal-title">Log meal</h3><button class="modal-close" onclick="closeModal('meal-modal')">×</button></div>
+    <input type="hidden" id="meal-category">
+    <div class="field"><label>Food</label><input type="text" id="meal-name" placeholder="e.g. Oats"></div>
+    <div class="field"><label>Quantity (optional)</label><input type="text" id="meal-qty" placeholder="e.g. 1 bowl / 150 g"></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <div class="field" style="flex:1;min-width:100px;"><label>Calories</label><input type="number" id="meal-cal" step="1"></div>
+      <div class="field" style="flex:1;min-width:100px;"><label>Protein (g)</label><input type="number" id="meal-pro" step="0.1"></div>
+      <div class="field" style="flex:1;min-width:100px;"><label>Carbs (g)</label><input type="number" id="meal-carb" step="0.1"></div>
+      <div class="field" style="flex:1;min-width:100px;"><label>Fat (g)</label><input type="number" id="meal-fat" step="0.1"></div>
+    </div>
+    <div class="field"><label>Notes (optional)</label><input type="text" id="meal-notes"></div>
+    <div class="error-text" id="meal-error" style="display:none;"></div>
+    <button class="btn btn-primary btn-sm" style="width:100%;" onclick="submitMeal()">Save meal</button>
+  </div>
+</div>
+
+<script src="../js/api.js"></script>
+<script src="../js/tracker.js"></script>
+</body>
+</html>

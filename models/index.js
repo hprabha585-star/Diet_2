@@ -284,11 +284,114 @@ const TrackerSession = sequelize.define('TrackerSession', {
   startAt: { type: DataTypes.DATE, allowNull: false },
   endAt: { type: DataTypes.DATE },              // null while running
   targetHours: { type: DataTypes.FLOAT, allowNull: false },
-  status: { type: DataTypes.ENUM('running', 'completed', 'broken'), defaultValue: 'running' },
+  // 'broken' is kept for rows written by the old code; new rows use
+  // 'ended_early' / 'cancelled' so history can tell "stopped short" from
+  // "called off without really starting".
+  status: {
+    type: DataTypes.ENUM('running', 'completed', 'broken', 'ended_early', 'cancelled'),
+    defaultValue: 'running'
+  },
+  scheduleKey: { type: DataTypes.STRING, defaultValue: '16:8' },
+  eatingHours: { type: DataTypes.FLOAT, defaultValue: 8 },
+  // Set when the client taps "Start eating window" after finishing a fast.
+  eatingStartedAt: { type: DataTypes.DATE },
+  eatingEndsAt: { type: DataTypes.DATE },
+  // Local calendar date the fast STARTED on, as sent by the browser. Used
+  // for streaks and the calendar so a fast started at 11pm IST doesn't get
+  // filed under the next UTC day.
+  localDate: { type: DataTypes.DATEONLY },
   note: { type: DataTypes.STRING }
 });
 User.hasMany(TrackerSession, { foreignKey: 'userId', onDelete: 'CASCADE' });
 TrackerSession.belongsTo(User, { foreignKey: 'userId' });
+
+/* ------------------------------------------------------------------ */
+/* TrackerProfile — one row per tracker client: their schedule, goals,  */
+/* units and reminder preferences. Separate from User so the coached    */
+/* side is untouched by tracker settings.                               */
+/* ------------------------------------------------------------------ */
+const TrackerProfile = sequelize.define('TrackerProfile', {
+  scheduleKey: { type: DataTypes.STRING, defaultValue: '16:8' },
+  fastHours: { type: DataTypes.FLOAT, defaultValue: 16 },
+  eatHours: { type: DataTypes.FLOAT, defaultValue: 8 },
+  startHour: { type: DataTypes.FLOAT, defaultValue: 20 },       // suggested daily start, 24h
+  dailyGoalHours: { type: DataTypes.FLOAT, defaultValue: 16 },
+
+  // Hydration
+  waterGoalMl: { type: DataTypes.INTEGER, defaultValue: 3000 },
+  waterUnit: { type: DataTypes.ENUM('ml', 'oz', 'l'), defaultValue: 'ml' },
+
+  // Nutrition goals
+  calorieGoal: { type: DataTypes.INTEGER, defaultValue: 2000 },
+  proteinGoalG: { type: DataTypes.INTEGER, defaultValue: 100 },
+  carbGoalG: { type: DataTypes.INTEGER, defaultValue: 250 },
+  fatGoalG: { type: DataTypes.INTEGER, defaultValue: 66 },
+
+  // Flexible weekly plan: { mon: {fastHours, eatHours, rest}, tue: {...} ... }
+  weeklySchedule: { type: DataTypes.JSON, defaultValue: {} },
+  schedulePaused: { type: DataTypes.BOOLEAN, defaultValue: false },
+
+  // Reminders — in-app, fired by the browser while the app is open.
+  reminders: {
+    type: DataTypes.JSON,
+    defaultValue: {
+      water: { enabled: false, everyHours: 2, fromHour: 8, toHour: 22 },
+      fastStart: { enabled: false },
+      fastEndingSoon: { enabled: false, minutesBefore: 30 },
+      fastCompleted: { enabled: false },
+      eatingEnding: { enabled: false, minutesBefore: 30 }
+    }
+  },
+  goalFocus: { type: DataTypes.STRING, defaultValue: 'Build a consistent fasting routine' },
+  dismissedTips: { type: DataTypes.JSON, defaultValue: [] }
+});
+User.hasOne(TrackerProfile, { foreignKey: 'userId', onDelete: 'CASCADE' });
+TrackerProfile.belongsTo(User, { foreignKey: 'userId' });
+
+TrackerProfile.getOrCreateFor = async function (userId) {
+  let profile = await TrackerProfile.findOne({ where: { userId } });
+  if (!profile) profile = await TrackerProfile.create({ userId });
+  return profile;
+};
+
+/* ------------------------------------------------------------------ */
+/* MealEntry — nutrition log for tracker clients. Keyed by the local    */
+/* calendar date the BROWSER reports, never by server time.             */
+/* ------------------------------------------------------------------ */
+const MealEntry = sequelize.define('MealEntry', {
+  date: { type: DataTypes.DATEONLY, allowNull: false },
+  category: { type: DataTypes.ENUM('breakfast', 'lunch', 'dinner', 'snack'), allowNull: false },
+  name: { type: DataTypes.STRING, allowNull: false },
+  quantity: { type: DataTypes.STRING },
+  calories: { type: DataTypes.FLOAT, defaultValue: 0 },
+  proteinG: { type: DataTypes.FLOAT, defaultValue: 0 },
+  carbsG: { type: DataTypes.FLOAT, defaultValue: 0 },
+  fatG: { type: DataTypes.FLOAT, defaultValue: 0 },
+  notes: { type: DataTypes.STRING }
+});
+User.hasMany(MealEntry, { foreignKey: 'userId', onDelete: 'CASCADE' });
+MealEntry.belongsTo(User, { foreignKey: 'userId' });
+
+/* ------------------------------------------------------------------ */
+/* RestDay — a day the client deliberately isn't fasting. Counted       */
+/* separately from a missed day and never held against a streak.        */
+/* ------------------------------------------------------------------ */
+const RestDay = sequelize.define('RestDay', {
+  date: { type: DataTypes.DATEONLY, allowNull: false },
+  note: { type: DataTypes.STRING }
+}, { indexes: [{ unique: true, fields: ['user_id', 'date'] }] });
+User.hasMany(RestDay, { foreignKey: 'userId', onDelete: 'CASCADE' });
+RestDay.belongsTo(User, { foreignKey: 'userId' });
+
+/* ------------------------------------------------------------------ */
+/* TrackerTaskLog — which daily task a client ticked off, per day.      */
+/* ------------------------------------------------------------------ */
+const TrackerTaskLog = sequelize.define('TrackerTaskLog', {
+  date: { type: DataTypes.DATEONLY, allowNull: false },
+  taskKey: { type: DataTypes.STRING, allowNull: false }
+}, { indexes: [{ unique: true, fields: ['user_id', 'date', 'task_key'] }] });
+User.hasMany(TrackerTaskLog, { foreignKey: 'userId', onDelete: 'CASCADE' });
+TrackerTaskLog.belongsTo(User, { foreignKey: 'userId' });
 
 /* ------------------------------------------------------------------ */
 /* TrackerWaterEntry — water log for Fasting Tracker clients.          */
@@ -297,7 +400,10 @@ TrackerSession.belongsTo(User, { foreignKey: 'userId' });
 /* ------------------------------------------------------------------ */
 const TrackerWaterEntry = sequelize.define('TrackerWaterEntry', {
   ml: { type: DataTypes.INTEGER, allowNull: false },
-  at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
+  at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+  // The browser's local calendar date, so "today's intake" is today for
+  // the client, not for whatever timezone the server happens to run in.
+  localDate: { type: DataTypes.DATEONLY }
 });
 User.hasMany(TrackerWaterEntry, { foreignKey: 'userId', onDelete: 'CASCADE' });
 TrackerWaterEntry.belongsTo(User, { foreignKey: 'userId' });
@@ -306,5 +412,6 @@ module.exports = {
   sequelize, User, WeightLog, Plan, Payment, Payout,
   Regimen, RegimenMeal, RegimenMilestone,
   ChecklistLog, ChecklistItem, WaterEntry,
-  Alert, AlertRead, Message, Settings, TrackerSession, TrackerWaterEntry
+  Alert, AlertRead, Message, Settings,
+  TrackerSession, TrackerWaterEntry, TrackerProfile, MealEntry, RestDay, TrackerTaskLog
 };

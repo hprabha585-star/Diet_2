@@ -23,7 +23,7 @@
       <a href="#alerts" class="nav-link" data-view="alerts"><span class="ico">!</span><span>Alerts</span><span class="nav-badge" id="badge-alerts" hidden>0</span></a>
       <a href="#chat" class="nav-link" data-view="chat"><span class="ico">✉</span><span>Message coach</span></a>
       <a href="#referral" class="nav-link" data-view="referral"><span class="ico">⇄</span><span>Refer &amp; earn</span></a>
-      <a href="#tracker" class="nav-link" data-view="tracker" id="nav-tracker"><span class="ico">◔</span><span>Fasting Tracker</span><span class="nav-lock" id="nav-tracker-lock">🔒</span></a>
+      <a href="/client/tracker.html" class="nav-link" id="nav-tracker"><span class="ico">◔</span><span>Fasting Tracker</span><span class="nav-lock" id="nav-tracker-lock">🔒</span></a>
       <a href="#contact" class="nav-link" data-view="contact"><span class="ico">☎</span><span>Contact us</span></a>
       <a href="#payment" class="nav-link" data-view="payment"><span class="ico">₹</span><span>Payment</span></a>
     </nav>
@@ -99,90 +99,12 @@
 
         <!-- Shown instead of the protocol checklist for tracker-mode clients -->
         <div id="today-tracker-redirect" class="card" style="display:none;text-align:center;">
-          <p style="margin-bottom:14px;">Your Fasting Tracker lives on its own page now.</p>
-          <button class="btn btn-primary btn-sm" onclick="showView('tracker')">Open Fasting Tracker</button>
+          <p style="margin-bottom:14px;">Your Fasting Tracker has its own full section — schedule, timer, stages, nutrition, hydration, history and stats.</p>
+          <a class="btn btn-primary btn-sm" href="/client/tracker.html">Open Fasting Tracker</a>
         </div>
       </div>
 
-      <!-- FASTING TRACKER — separate page, unlocked only on the Fasting Tracker plan -->
-      <div class="view" id="view-tracker">
-        <div class="card" id="tracker-locked" style="display:none;text-align:center;padding:36px 24px;">
-          <div style="font-size:32px;">🔒</div>
-          <h3 style="margin-top:10px;">Fasting Tracker is a separate plan</h3>
-          <p class="hint" style="margin-top:8px;max-width:44ch;margin-left:auto;margin-right:auto;">
-            Run your own fasting schedule with no coach guidance — start/stop timer, water goal, and your own stats.
-            Pick it up from Payment to unlock this page.
-          </p>
-          <button class="btn btn-primary btn-sm" style="margin-top:14px;" onclick="showView('payment')">Go to Payment</button>
-        </div>
-
-        <div id="tracker-unlocked" style="display:none;">
-          <div class="tracker-hero">
-            <div class="panel-label" style="color:#A9B3AB;">Fasting Tracker — fully self-guided</div>
-            <div class="ring-wrap" style="margin:14px auto;">
-              <svg width="220" height="220" viewBox="0 0 220 220" id="tracker-ring-svg">
-                <circle cx="110" cy="110" r="96" fill="none" stroke="#33443B" stroke-width="14"/>
-                <circle cx="110" cy="110" r="96" fill="none" stroke="#B8752E" stroke-width="14"
-                        stroke-dasharray="603" stroke-dashoffset="603" stroke-linecap="round" id="tracker-ring-progress"
-                        style="transform:rotate(-90deg);transform-origin:110px 110px;transition:stroke-dashoffset 1s linear;"/>
-              </svg>
-              <div class="ring-label">
-                <div class="state" id="tracker-stage-name">—</div>
-                <div class="time" id="tracker-timer">00:00:00</div>
-                <div class="sub" id="tracker-elapsed-pct">0% elapsed</div>
-              </div>
-            </div>
-            <div class="tracker-target" id="tracker-target"></div>
-
-            <div id="tracker-idle-form" class="tracker-form">
-              <div class="field" style="margin-bottom:0;">
-                <label style="color:#C9D0C7;">Target hours</label>
-                <input type="number" id="tracker-target-input" value="16" min="1" max="72" style="width:100px;">
-              </div>
-              <button class="btn btn-primary" onclick="startTrackerFast()">Start fast</button>
-            </div>
-            <div id="tracker-running-actions" style="display:none;display:flex;gap:10px;">
-              <button class="btn btn-outline btn-sm" onclick="editTrackerStart()">✎ Edit start time</button>
-              <button class="btn btn-primary" onclick="stopTrackerFast()">End fast</button>
-            </div>
-          </div>
-
-          <div class="card" id="tracker-stage-panel" style="margin-top:16px;">
-            <div class="stage-timeline" id="stage-timeline"></div>
-            <p class="hint" id="stage-description" style="margin-top:10px;"></p>
-          </div>
-
-          <div class="section-title">Water</div>
-          <div class="card">
-            <div class="water-goal-row">
-              <div class="ring-wrap small">
-                <svg width="90" height="90" viewBox="0 0 90 90">
-                  <circle cx="45" cy="45" r="38" fill="none" stroke="#DCE7DF" stroke-width="9"/>
-                  <circle cx="45" cy="45" r="38" fill="none" stroke="#1F4B3F" stroke-width="9" stroke-linecap="round"
-                          id="tracker-water-ring" stroke-dasharray="239" stroke-dashoffset="239"
-                          style="transform:rotate(-90deg);transform-origin:45px 45px;"/>
-                </svg>
-                <div class="ring-label"><div class="time" style="font-size:14px;" id="tracker-water-pct">0%</div></div>
-              </div>
-              <div>
-                <div style="font-size:15px;font-weight:600;" id="tracker-water-today">0 ml of goal</div>
-                <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
-                  <button class="btn btn-outline btn-sm" onclick="logTrackerWater(250)">+250 ml</button>
-                  <button class="btn btn-outline btn-sm" onclick="logTrackerWater(500)">+500 ml</button>
-                  <button class="btn-ghost btn-sm" onclick="editWaterGoal()">Edit goal</button>
-                </div>
-              </div>
-            </div>
-            <div class="water-bars" id="tracker-water-bars" style="margin-top:16px;"></div>
-          </div>
-
-          <div class="section-title">Your progress</div>
-          <div class="stat-grid four" id="tracker-stats-grid"></div>
-
-          <div class="section-title">History</div>
-          <div class="card" id="tracker-history"></div>
-        </div>
-      </div>
+      <!-- The Fasting Tracker now lives on its own page: /client/tracker.html -->
 
       <!-- HISTORY & WEIGHT -->
       <div class="view" id="view-history">

@@ -152,13 +152,15 @@
   <div class="modal" style="max-width:680px;">
     <div class="modal-head"><h3>Assign plan — <span id="assign-client-name"></span></h3><button class="modal-close" onclick="closeModal('assign-plan-modal')">×</button></div>
     <input type="hidden" id="assign-client-id">
+    <div class="assigned-days-strip" id="assigned-days-strip"></div>
     <div class="day-defaults-row">
       <label class="hint" style="white-space:nowrap;">Day</label>
-      <input type="number" id="assign-day" min="1" max="55" style="width:80px;" onchange="fillDayDefaults()">
+      <input type="number" id="assign-day" min="1" style="width:90px;" onchange="fillDayDefaults()">
       <select id="assign-day-preset" onchange="applyPreset()">
         <option value="">Pick a 55-day default to pre-fill…</option>
       </select>
     </div>
+    <div class="assign-status" id="assign-status"></div>
     <div style="display:flex;gap:10px;">
       <label class="hint"><input type="checkbox" id="assign-fullfast" onchange="toggleAssignFullFast()"> Full-day fast (no eating window)</label>
     </div>
@@ -203,6 +205,17 @@
     <div class="field"><label><input type="checkbox" id="ac-activate"> Activate immediately (skip payment approval)</label></div>
     <div class="error-text" id="ac-error" style="display:none;"></div>
     <button class="btn btn-primary btn-sm" onclick="submitAddClient()">Create client</button>
+  </div>
+</div>
+
+<!-- CLIENT DETAIL modal -->
+<div class="modal-backdrop" id="client-detail-modal">
+  <div class="modal" style="max-width:640px;">
+    <div class="modal-head">
+      <h3>Client — <span id="client-detail-name"></span></h3>
+      <button class="modal-close" onclick="closeModal('client-detail-modal')">×</button>
+    </div>
+    <div id="client-detail-body"></div>
   </div>
 </div>
 

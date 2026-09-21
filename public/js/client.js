@@ -2,8 +2,6 @@ let currentUser = null;
 let dashboardData = null;
 let timerInterval = null;
 let addItemKind = 'meal';
-let trackerRunning = null;
-let trackerWaterGoal = 3000;
 
 document.addEventListener('DOMContentLoaded', init);
 
@@ -12,7 +10,9 @@ async function init() {
   if (!currentUser) return;
   document.getElementById('user-chip').textContent = currentUser.name;
 
-  document.querySelectorAll('.nav-link').forEach(a => {
+  // Only intercept in-page views. The Fasting Tracker link is a real
+  // link to its own page, so it must NOT be preventDefault()-ed.
+  document.querySelectorAll('.nav-link[data-view]').forEach(a => {
     a.addEventListener('click', (e) => {
       e.preventDefault();
       showView(a.dataset.view);
@@ -35,7 +35,6 @@ function showView(view) {
   document.getElementById('topbar-title').textContent = document.querySelector(`.nav-link[data-view="${view}"] span:nth-child(2)`).textContent;
   closeSidebar();
   if (view === 'chat') loadChat();
-  if (view === 'tracker') loadTrackerPage();
 }
 
 function openSidebar() { document.getElementById('sidebar').classList.add('open'); document.getElementById('sidebar-scrim').classList.add('show'); }
@@ -71,6 +70,7 @@ async function loadDashboard() {
   if (isTrackerPlan) {
     document.getElementById('today-protocol').style.display = 'none';
     document.getElementById('today-tracker-redirect').style.display = 'block';
+    document.getElementById('progress-bars').style.display = 'none';
   } else {
     document.getElementById('today-tracker-redirect').style.display = 'none';
     document.getElementById('today-protocol').style.display = 'block';
@@ -343,156 +343,16 @@ function tick() {
       document.getElementById('eat-countdown').textContent = fmtCountdown(fs.secondsRemaining);
     }
   }
-  if (dashboardData && dashboardData.planMode === 'tracker' && trackerRunning) {
-    renderTrackerRing();
-  }
 }
 
-/* ------------------------------------------------------------------ */
-/* Fasting Tracker (self-guided, no coach) — its own page, unlocked      */
-/* only for clients on the tracker plan.                                */
-/* ------------------------------------------------------------------ */
-
-// Generic fasting-physiology stages used to label the ring, purely
-// informational — thresholds are approximate, not medical guidance.
-const FASTING_STAGES = [
-  { upTo: 4, name: 'Anabolic', desc: 'Still digesting your last meal — blood sugar is elevated.' },
-  { upTo: 12, name: 'Catabolic', desc: 'Blood sugar has dropped and your body is turning to glycogen stores.' },
-  { upTo: 18, name: 'Fat burning', desc: 'Glycogen is running low — your body increasingly burns stored fat for energy.' },
-  { upTo: Infinity, name: 'Ketosis', desc: 'Fat breakdown produces ketones, now a major fuel source for your brain and body.' }
-];
-function stageForHours(h) { return FASTING_STAGES.find(s => h < s.upTo) || FASTING_STAGES[FASTING_STAGES.length - 1]; }
-
-async function loadTrackerPage() {
-  const isTrackerPlan = dashboardData && dashboardData.planMode === 'tracker';
-  document.getElementById('tracker-locked').style.display = isTrackerPlan ? 'none' : 'block';
-  document.getElementById('tracker-unlocked').style.display = isTrackerPlan ? 'block' : 'none';
-  if (!isTrackerPlan) return;
-
-  const data = await apiRequest('/client/dashboard'); // re-fetch: gives running + recentSessions
-  trackerRunning = data.running || null;
-  document.getElementById('tracker-idle-form').style.display = trackerRunning ? 'none' : 'flex';
-  document.getElementById('tracker-running-actions').style.display = trackerRunning ? 'flex' : 'none';
-  document.getElementById('tracker-target').textContent = trackerRunning ? `Target: ${trackerRunning.targetHours}h` : '';
-  renderTrackerRing();
-  renderTrackerHistory(data.recentSessions || []);
-  loadTrackerStats();
-  loadTrackerWater();
-}
-
-function renderTrackerRing() {
-  const svgCircumference = 603; // 2 * π * 96, matches the SVG radius
-  if (!trackerRunning) {
-    document.getElementById('tracker-ring-progress').setAttribute('stroke-dashoffset', svgCircumference);
-    document.getElementById('tracker-stage-name').textContent = 'Ready';
-    document.getElementById('tracker-timer').textContent = '00:00:00';
-    document.getElementById('tracker-elapsed-pct').textContent = 'Not fasting';
-    renderStageTimeline(0);
-    return;
-  }
-  const elapsedSec = (Date.now() - new Date(trackerRunning.startAt).getTime()) / 1000;
-  const elapsedHours = elapsedSec / 3600;
-  const pct = Math.min(100, Math.round((elapsedHours / trackerRunning.targetHours) * 100));
-  const offset = svgCircumference - (svgCircumference * Math.min(100, pct)) / 100;
-
-  document.getElementById('tracker-ring-progress').setAttribute('stroke-dashoffset', offset);
-  document.getElementById('tracker-timer').textContent = fmtCountdown(elapsedSec);
-  document.getElementById('tracker-elapsed-pct').textContent = `${pct}% elapsed`;
-
-  const stage = stageForHours(elapsedHours);
-  document.getElementById('tracker-stage-name').textContent = stage.name;
-  document.getElementById('stage-description').textContent = stage.desc;
-  renderStageTimeline(elapsedHours);
-}
-
-function renderStageTimeline(elapsedHours) {
-  document.getElementById('stage-timeline').innerHTML = FASTING_STAGES.map((s, i) => {
-    const cls = elapsedHours < (FASTING_STAGES[i - 1] ? FASTING_STAGES[i - 1].upTo : 0) ? '' :
-      (elapsedHours < s.upTo ? 'active' : 'done');
-    return `<div class="stage-step ${cls}">${esc(s.name)}</div>`;
-  }).join('<span class="stage-arrow">›</span>');
-}
-
-function renderTrackerHistory(sessions) {
-  document.getElementById('tracker-history').innerHTML = sessions.length ? sessions.map(s => {
-    const hours = s.endAt ? ((new Date(s.endAt) - new Date(s.startAt)) / 3600000).toFixed(1) : '—';
-    return `<div class="tracker-history-row">
-      <span>${new Date(s.startAt).toLocaleDateString()} · target ${s.targetHours}h</span>
-      <span class="tracker-status-${s.status}">${s.status === 'running' ? 'Running' : `${hours}h — ${s.status}`}</span>
-    </div>`;
-  }).join('') : '<p class="hint">No fasts logged yet.</p>';
-}
-
-async function loadTrackerStats() {
-  const s = await apiRequest('/client/tracker/stats');
-  document.getElementById('tracker-stats-grid').innerHTML = `
-    <div class="card stat-card"><div class="val">${s.totalFasts}</div><div class="lbl">Total fasts</div></div>
-    <div class="card stat-card"><div class="val">${s.longestFastHours}h</div><div class="lbl">Longest fast</div></div>
-    <div class="card stat-card"><div class="val">${s.avg7FastHours}h</div><div class="lbl">7-fast average</div></div>
-    <div class="card stat-card"><div class="val">${s.currentStreak}</div><div class="lbl">Current streak</div></div>`;
-}
-
-async function startTrackerFast() {
-  try {
-    const targetHours = parseFloat(document.getElementById('tracker-target-input').value);
-    await apiRequest('/client/tracker/start', { method: 'POST', body: { targetHours } });
-    await loadTrackerPage();
-  } catch (err) { alert(err.message); }
-}
-async function stopTrackerFast() {
-  try {
-    await apiRequest('/client/tracker/stop', { method: 'POST' });
-    await loadTrackerPage();
-    loadProgress();
-  } catch (err) { alert(err.message); }
-}
-async function editTrackerStart() {
-  if (!trackerRunning) return;
-  const current = new Date(trackerRunning.startAt);
-  const hhmm = prompt('When did this fast actually start? (HH:MM, 24h, today)', `${String(current.getHours()).padStart(2, '0')}:${String(current.getMinutes()).padStart(2, '0')}`);
-  if (!hhmm) return;
-  const [h, m] = hhmm.split(':').map(Number);
-  if (isNaN(h) || isNaN(m)) return alert('Enter a time like 18:30');
-  const startAt = new Date();
-  startAt.setHours(h, m, 0, 0);
-  try {
-    await apiRequest(`/client/tracker/session/${trackerRunning.id}`, { method: 'PATCH', body: { startAt: startAt.toISOString() } });
-    await loadTrackerPage();
-  } catch (err) { alert(err.message); }
-}
-
-/* ---- Tracker water (goal ring + last-7-day bars) ---- */
-async function loadTrackerWater() {
-  const data = await apiRequest('/client/tracker/water');
-  trackerWaterGoal = data.goalMl;
-  const circumference = 239; // 2 * π * 38
-  const pct = Math.min(100, Math.round((data.todayMl / data.goalMl) * 100));
-  document.getElementById('tracker-water-ring').setAttribute('stroke-dashoffset', circumference - (circumference * pct) / 100);
-  document.getElementById('tracker-water-pct').textContent = `${pct}%`;
-  document.getElementById('tracker-water-today').textContent = `${data.todayMl} ml of ${data.goalMl} ml goal`;
-
-  const max = Math.max(data.goalMl, ...data.last7.map(d => d.ml), 1);
-  document.getElementById('tracker-water-bars').innerHTML = `<div class="water-bars">` + data.last7.map(d => `
-    <div class="water-bar-col">
-      <div class="water-bar" style="height:100%;"><div class="fill" style="height:${Math.round((d.ml / max) * 100)}%;"></div></div>
-      <div class="water-bar-lbl">${new Date(d.date).toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' })}</div>
-    </div>`).join('') + `</div>`;
-}
-async function logTrackerWater(ml) {
-  try { await apiRequest('/client/tracker/water', { method: 'POST', body: { ml } }); await loadTrackerWater(); }
-  catch (err) { alert(err.message); }
-}
-async function editWaterGoal() {
-  const goalMl = parseInt(prompt('Daily water goal (ml)', trackerWaterGoal), 10);
-  if (!goalMl) return;
-  try { await apiRequest('/client/tracker/water-goal', { method: 'POST', body: { goalMl } }); await loadTrackerWater(); }
-  catch (err) { alert(err.message); }
-}
+/* The self-guided Fasting Tracker now lives in its own section:
+   public/client/tracker.html + public/js/tracker.js. Nothing tracker-
+   related runs on this page any more. */
 
 /* ------------------------------------------------------------------ */
 /* History & weight                                                      */
 /* ------------------------------------------------------------------ */
-async function loadHistoryPage() {
+async function loadHistoryPage(opts = {}) {
   try {
     const data = await apiRequest('/client/history');
     document.getElementById('weight-list').innerHTML = (data.weightLogs || []).slice().reverse().map(w => `
@@ -504,12 +364,15 @@ async function loadHistoryPage() {
     // Pre-fill the calculator with whatever we already know, so returning
     // to this page doesn't make the person retype everything.
     const latestWeight = data.weightLogs && data.weightLogs.length ? data.weightLogs[data.weightLogs.length - 1].weightKg : '';
-    if (latestWeight) document.getElementById('bmi-weight-input').value = latestWeight;
+    const wEl = document.getElementById('bmi-weight-input');
+    if (latestWeight && !wEl.value) wEl.value = latestWeight;
     if (currentUser.heightCm) document.getElementById('height-input').value = currentUser.heightCm;
     if (currentUser.age) document.getElementById('age-input').value = currentUser.age;
     if (currentUser.gender) document.getElementById('gender-input').value = currentUser.gender;
 
-    document.getElementById('bmi-result').innerHTML = '';
+    // Only clear the calculator output on a plain page visit — clearing it
+    // after a save is what made "Save this" look like it did nothing.
+    if (!opts.keepResult) document.getElementById('bmi-result').innerHTML = '';
   } catch (err) { /* ignore if not active yet */ }
 }
 document.addEventListener('DOMContentLoaded', () => {
@@ -663,15 +526,39 @@ function clearBmi() {
 
 async function saveBmiCalc() {
   if (!lastBmiCalc) return;
+  const confirmEl = document.getElementById('bmi-save-confirm');
+  const errEl = document.getElementById('bmi-error');
+  errEl.style.display = 'none';
   try {
-    await apiRequest('/client/profile', { method: 'POST', body: {
-      heightCm: lastBmiCalc.heightCm, age: lastBmiCalc.age || undefined, gender: lastBmiCalc.gender || undefined
-    }});
+    // Two saves, in this order: the body profile (height/age/gender, which
+    // the coach can then see on their side) and the weight entry itself.
+    const res = await apiRequest('/client/profile', {
+      method: 'POST',
+      body: {
+        heightCm: lastBmiCalc.heightCm,
+        age: lastBmiCalc.age || undefined,
+        gender: lastBmiCalc.gender || undefined
+      }
+    });
     await apiRequest('/client/weight', { method: 'POST', body: { weightKg: lastBmiCalc.weightKg } });
-    const confirmEl = document.getElementById('bmi-save-confirm');
-    if (confirmEl) { confirmEl.style.display = 'inline'; }
-    await loadHistoryPage();
-  } catch (err) { alert(err.message); }
+
+    // The old code never refreshed the stored session user, so height and
+    // age looked "unsaved" the moment you came back to the page — and
+    // loadHistoryPage() then blanked the result panel, which made it look
+    // like nothing had happened at all. Both fixed here.
+    if (res && res.user) {
+      currentUser = res.user;
+      setSession(getToken(), res.user);
+    }
+    await loadHistoryPage({ keepResult: true });
+    if (confirmEl) {
+      confirmEl.textContent = 'Saved — added to your weight log.';
+      confirmEl.style.display = 'inline';
+    }
+  } catch (err) {
+    errEl.textContent = `Could not save: ${err.message}`;
+    errEl.style.display = 'block';
+  }
 }
 
 async function logWeight() {
