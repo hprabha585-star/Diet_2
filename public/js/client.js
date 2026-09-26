@@ -9,6 +9,7 @@ async function init() {
   currentUser = requireRoleOrRedirect('client');
   if (!currentUser) return;
   document.getElementById('user-chip').textContent = currentUser.name;
+  document.getElementById('topbar-title').textContent = todayDateLabel();
 
   // Only intercept in-page views. The Fasting Tracker link is a real
   // link to its own page, so it must NOT be preventDefault()-ed.
@@ -32,9 +33,43 @@ function showView(view) {
   document.querySelectorAll('.nav-link').forEach(a => a.classList.remove('active'));
   document.getElementById(`view-${view}`).classList.add('active');
   document.querySelector(`.nav-link[data-view="${view}"]`).classList.add('active');
-  document.getElementById('topbar-title').textContent = document.querySelector(`.nav-link[data-view="${view}"] span:nth-child(2)`).textContent;
+  // "Today" shows the actual calendar date + weekday instead of the word
+  // "Today", so it's obvious at a glance which day this is.
+  document.getElementById('topbar-title').textContent = view === 'today'
+    ? todayDateLabel()
+    : document.querySelector(`.nav-link[data-view="${view}"] span:nth-child(2)`).textContent;
   closeSidebar();
   if (view === 'chat') loadChat();
+}
+
+function todayDateLabel() {
+  return new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' });
+}
+
+/* ------------------------------------------------------------------ */
+/* Profile popup — replaces a plain name in the topbar                  */
+/* ------------------------------------------------------------------ */
+async function openProfileModal() {
+  openModal('profile-modal');
+  const body = document.getElementById('profile-modal-body');
+  body.innerHTML = '<p class="hint">Loading…</p>';
+  try {
+    const p = await apiRequest('/client/profile-summary');
+    const bmiBand = p.bmi === null || p.bmi === undefined ? null
+      : p.bmi < 18.5 ? 'Underweight' : p.bmi < 25 ? 'Normal' : p.bmi < 30 ? 'Overweight' : 'Obese';
+    body.innerHTML = `
+      <div class="detail-grid">
+        <div class="detail-cell"><span>Name</span><b>${esc(p.name)}</b></div>
+        <div class="detail-cell"><span>Age</span><b>${p.age || '—'}${p.gender ? ' · ' + esc(p.gender) : ''}</b></div>
+        <div class="detail-cell"><span>Height</span><b>${p.heightCm ? p.heightCm + ' cm' : '—'}</b></div>
+        <div class="detail-cell"><span>Current weight</span><b>${p.currentWeightKg ? p.currentWeightKg + ' kg' : '—'}</b></div>
+        <div class="detail-cell"><span>BMI</span><b>${p.bmi ?? '—'} ${bmiBand ? `<span class="badge badge-${bmiBand === 'Normal' ? 'active' : 'pending'}">${bmiBand}</span>` : ''}</b></div>
+        ${p.day ? `<div class="detail-cell"><span>Programme day</span><b>${p.day}/${p.challengeLengthDays}</b></div>` : ''}
+      </div>
+      ${!p.heightCm ? '<p class="hint" style="margin-top:12px;">Add your height and age from History &amp; weight → BMI calculator to see BMI here.</p>' : ''}`;
+  } catch (err) {
+    body.innerHTML = `<p class="error-text">${esc(err.message)}</p>`;
+  }
 }
 
 function openSidebar() { document.getElementById('sidebar').classList.add('open'); document.getElementById('sidebar-scrim').classList.add('show'); }
@@ -172,6 +207,19 @@ function renderProtocolToday() {
   document.getElementById('today-day').textContent = dashboardData.day;
   document.getElementById('today-total').textContent = dashboardData.challengeLengthDays;
   document.getElementById('today-focus').textContent = dashboardData.regimen ? dashboardData.regimen.focus || '' : 'No plan assigned yet for today — check back soon.';
+
+  // Coach-editable, client-visible day info — a fuller note than "focus",
+  // shown as its own card only when the coach has actually written one.
+  const dayInfoCard = document.getElementById('day-info-card');
+  const dayInfoText = dashboardData.regimen ? (dashboardData.regimen.dayInfo || '') : '';
+  if (dayInfoCard) {
+    if (dayInfoText) {
+      document.getElementById('day-info-text').textContent = dayInfoText;
+      dayInfoCard.style.display = 'block';
+    } else {
+      dayInfoCard.style.display = 'none';
+    }
+  }
 
   const paused = dashboardData.fastingPause.active;
   document.getElementById('pause-inactive').style.display = paused ? 'none' : 'block';
@@ -322,25 +370,70 @@ async function resumeFasting() {
 /* Local-time tick: recompute countdown every second in THIS browser's  */
 /* own clock — never trust server time for the display.                */
 /* ------------------------------------------------------------------ */
+// "9:00 AM" style clock label from a 24h float hour (e.g. 17.5 -> "5:30 PM").
+function hourToClock(h) {
+  if (h === null || h === undefined || isNaN(h)) return '—';
+  let hh = Math.floor(h);
+  let mm = Math.round((h - hh) * 60);
+  if (mm === 60) { mm = 0; hh += 1; }
+  hh = ((hh % 24) + 24) % 24;
+  const period = hh >= 12 ? 'PM' : 'AM';
+  let h12 = hh % 12; if (h12 === 0) h12 = 12;
+  return `${h12}:${String(mm).padStart(2, '0')} ${period}`;
+}
+
+// Fasting/eating hours implied by a window (mirrors the math the server
+// uses when it pre-fills the 55-day defaults).
+function windowDurations(win) {
+  if (win.isFullDayFast) return { eatingHours: 0, fastingHours: 24 };
+  const eatingHours = win.endHour >= win.startHour
+    ? (win.endHour - win.startHour)
+    : (24 - win.startHour + win.endHour);
+  return { eatingHours, fastingHours: 24 - eatingHours };
+}
+
+// Shows the exact clock start/end of each window, and — for whichever
+// phase is currently active — an elapsed timer counting UP from when that
+// phase began, rather than a countdown to when it ends.
 function tick() {
   if (dashboardData && dashboardData.planMode === 'protocol' && dashboardData.regimen) {
-    const fs = computeFastingState(dashboardData.regimen, dashboardData.fastingPause.active, dashboardData.fastingPause.reason);
+    const win = dashboardData.regimen;
+    const fs = computeFastingState(win, dashboardData.fastingPause.active, dashboardData.fastingPause.reason);
     const fastEl = document.getElementById('fast-state');
     const eatEl = document.getElementById('eat-state');
+    const fastRangeEl = document.getElementById('fast-range');
+    const eatRangeEl = document.getElementById('eat-range');
+
+    if (fastRangeEl && eatRangeEl) {
+      if (win.isFullDayFast) {
+        fastRangeEl.textContent = `${hourToClock(win.startHour)} today to ${hourToClock(win.startHour)} tomorrow`;
+        eatRangeEl.textContent = 'No eating window today — full-day fast';
+      } else {
+        fastRangeEl.textContent = `${hourToClock(win.endHour)} to ${hourToClock(win.startHour)}`;
+        eatRangeEl.textContent = `${hourToClock(win.startHour)} to ${hourToClock(win.endHour)}`;
+      }
+    }
+
     if (fs.state === 'paused') {
       fastEl.textContent = 'Paused'; eatEl.textContent = 'Paused';
       document.getElementById('fast-countdown').textContent = '--:--:--';
       document.getElementById('eat-countdown').textContent = '--:--:--';
       return;
     }
+
+    const { eatingHours, fastingHours } = windowDurations(win);
     if (fs.state === 'fasting') {
-      fastEl.textContent = 'Active now'; eatEl.textContent = 'Opens soon';
-      document.getElementById('fast-countdown').textContent = fmtCountdown(fs.secondsRemaining);
-      document.getElementById('eat-countdown').textContent = fmtCountdown(fs.secondsRemaining);
+      fastEl.textContent = 'Active now';
+      eatEl.textContent = 'Opens soon';
+      const elapsed = Math.max(0, Math.round(fastingHours * 3600 - fs.secondsRemaining));
+      document.getElementById('fast-countdown').textContent = fmtCountdown(elapsed);
+      document.getElementById('eat-countdown').textContent = '--:--:--';
     } else {
-      fastEl.textContent = 'Starts soon'; eatEl.textContent = 'Active now';
-      document.getElementById('fast-countdown').textContent = fmtCountdown(fs.secondsRemaining);
-      document.getElementById('eat-countdown').textContent = fmtCountdown(fs.secondsRemaining);
+      fastEl.textContent = 'Starts soon';
+      eatEl.textContent = 'Active now';
+      const elapsed = Math.max(0, Math.round(eatingHours * 3600 - fs.secondsRemaining));
+      document.getElementById('eat-countdown').textContent = fmtCountdown(elapsed);
+      document.getElementById('fast-countdown').textContent = '--:--:--';
     }
   }
 }
@@ -355,11 +448,26 @@ function tick() {
 async function loadHistoryPage(opts = {}) {
   try {
     const data = await apiRequest('/client/history');
-    document.getElementById('weight-list').innerHTML = (data.weightLogs || []).slice().reverse().map(w => `
+    // Server returns weightLogs oldest-first; reverse for display (newest
+    // first) but keep the array so each row can compare itself to the
+    // NEXT array element, which — after reversing — is the chronologically
+    // earlier entry, i.e. "what did I weigh last time?".
+    const newestFirst = (data.weightLogs || []).slice().reverse();
+    document.getElementById('weight-list').innerHTML = newestFirst.map((w, idx) => {
+      const prev = newestFirst[idx + 1];
+      let deltaHtml = '';
+      if (prev) {
+        const delta = Math.round((w.weightKg - prev.weightKg) * 10) / 10;
+        if (delta > 0) deltaHtml = `<span class="weight-delta up">▲ +${delta} kg</span>`;
+        else if (delta < 0) deltaHtml = `<span class="weight-delta down">▼ ${delta} kg</span>`;
+        else deltaHtml = `<span class="weight-delta same">No change</span>`;
+      }
+      return `
       <div class="row-between" style="padding:10px 0;border-top:1px solid var(--line);">
-        <span>${w.weightKg} kg — ${new Date(w.date).toLocaleDateString()}</span>
+        <span>${w.weightKg} kg${w.bmiAtLog ? ` <span class="hint">· BMI ${w.bmiAtLog}</span>` : ''} — ${new Date(w.date).toLocaleDateString()} ${deltaHtml}</span>
         <button class="btn-ghost btn-sm" onclick="deleteWeight(${w.id})">Delete</button>
-      </div>`).join('') || '<p class="hint">No entries yet.</p>';
+      </div>`;
+    }).join('') || '<p class="hint">No entries yet.</p>';
 
     // Pre-fill the calculator with whatever we already know, so returning
     // to this page doesn't make the person retype everything.
@@ -585,6 +693,12 @@ async function loadAlerts() {
     const badge = document.getElementById('badge-alerts');
     badge.hidden = data.unread === 0;
     badge.textContent = data.unread;
+    // Same count, mirrored beside the profile button in the topbar.
+    const topbarBadge = document.getElementById('topbar-badge-alerts');
+    if (topbarBadge) {
+      topbarBadge.hidden = data.unread === 0;
+      topbarBadge.textContent = data.unread;
+    }
     document.getElementById('alerts-list').innerHTML = data.alerts.length ? data.alerts.map(a => `
       <div class="card" style="margin-bottom:10px;">
         <div class="row-between"><strong>${esc(a.title)}</strong><span class="badge badge-${a.level === 'urgent' ? 'rejected' : a.level === 'important' ? 'pending' : 'active'}">${esc(a.level)}</span></div>
