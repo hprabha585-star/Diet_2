@@ -36,7 +36,13 @@
     <div class="topbar">
       <button class="hamburger" onclick="openSidebar()" aria-label="Open menu">☰</button>
       <h1 id="topbar-title">Today</h1>
-      <div id="user-chip" class="user-chip"></div>
+      <div class="topbar-right">
+        <button class="alert-bell" onclick="showView('alerts')" aria-label="Alerts">
+          <span class="ico">!</span>
+          <span class="nav-badge" id="topbar-badge-alerts" hidden>0</span>
+        </button>
+        <button id="user-chip" class="user-chip" onclick="openProfileModal()"></button>
+      </div>
     </div>
 
     <div class="content">
@@ -56,12 +62,16 @@
           <div class="fasting-panels">
             <div class="card fasting-panel">
               <div class="panel-label">Fasting window</div>
+              <div class="panel-range" id="fast-range">— to —</div>
               <div class="panel-state" id="fast-state">—</div>
+              <div class="panel-elapsed-label">Elapsed</div>
               <div class="panel-countdown" id="fast-countdown">--:--:--</div>
             </div>
             <div class="card fasting-panel">
               <div class="panel-label">Eating window</div>
+              <div class="panel-range" id="eat-range">— to —</div>
               <div class="panel-state" id="eat-state">—</div>
+              <div class="panel-elapsed-label">Elapsed</div>
               <div class="panel-countdown" id="eat-countdown">--:--:--</div>
             </div>
           </div>
@@ -76,6 +86,10 @@
 
           <div class="section-title">Day <span id="today-day">—</span> of <span id="today-total">55</span></div>
           <p id="today-focus" class="hint" style="margin-bottom:14px;"></p>
+          <div class="card day-info-card" id="day-info-card" style="display:none;">
+            <div class="panel-label">Today's plan, from your coach</div>
+            <p id="day-info-text" style="margin-top:8px;"></p>
+          </div>
 
           <div class="section-subtitle">Meals</div>
           <div id="meals-list"></div>
@@ -169,6 +183,15 @@
     <div class="field"><label>Label</label><input type="text" id="add-item-label"></div>
     <div class="error-text" id="add-item-error" style="display:none;"></div>
     <button class="btn btn-primary btn-sm" onclick="submitAddItem()">Add</button>
+  </div>
+</div>
+
+<!-- PROFILE modal (replaces the plain name in the topbar) -->
+<div class="modal-backdrop" id="profile-modal">
+  <div class="modal">
+    <div class="modal-head"><h3>Your profile</h3><button class="modal-close" onclick="closeModal('profile-modal')">×</button></div>
+    <div id="profile-modal-body"><p class="hint">Loading…</p></div>
+    <p class="hint" style="margin-top:14px;">Height, age and gender are set from History &amp; weight → BMI calculator.</p>
   </div>
 </div>
 
