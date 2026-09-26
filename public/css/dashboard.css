@@ -42,7 +42,22 @@
   position: sticky; top: 0; z-index: 30;
 }
 .topbar h1 { font-size: 21px; flex: 1; }
-.user-chip { font-size: 13.5px; color: #6B6F63; }
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+.user-chip {
+  font-size: 13.5px; color: var(--ink); font-weight: 600;
+  background: var(--paper); border: 1px solid var(--line); border-radius: 100px;
+  padding: 7px 16px; cursor: pointer;
+}
+.user-chip:hover { border-color: var(--ink); }
+.alert-bell {
+  position: relative; width: 38px; height: 38px; border-radius: 100px;
+  background: var(--paper); border: 1px solid var(--line); color: var(--ink);
+  font-size: 15px; display: flex; align-items: center; justify-content: center;
+}
+.alert-bell:hover { border-color: var(--ink); }
+.alert-bell .nav-badge {
+  position: absolute; top: -4px; right: -4px; margin-left: 0;
+}
 .hamburger {
   display: none; background: none; border: 1px solid var(--line); border-radius: 6px;
   width: 38px; height: 38px; font-size: 16px; color: var(--ink);
@@ -456,9 +471,21 @@
 .fasting-panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .fasting-panel { text-align: center; padding: 24px; }
 .panel-label { font-size: 12.5px; color: #6B6F63; text-transform: uppercase; letter-spacing: 0.4px; }
-.panel-state { font-family: var(--font-display); font-size: 20px; margin: 8px 0 4px; }
+.panel-range { font-size: 14.5px; font-weight: 600; margin-top: 6px; color: var(--ink); }
+.panel-state { font-family: var(--font-display); font-size: 18px; margin: 8px 0 2px; color: var(--ember); }
+.panel-elapsed-label { font-size: 11px; color: #6B6F63; text-transform: uppercase; letter-spacing: 0.4px; margin-top: 8px; }
 .panel-countdown { font-family: var(--font-display); font-size: 30px; }
 @media (max-width: 700px) { .fasting-panels { grid-template-columns: 1fr; } }
+
+/* Coach-editable, client-visible day info card on Today */
+.day-info-card { border-left: 3px solid var(--ember); margin-bottom: 16px; }
+.day-info-card p { font-size: 14.5px; color: #3C4A41; white-space: pre-wrap; }
+
+/* Day-by-day weight trend arrows in History & weight */
+.weight-delta { font-size: 12.5px; font-weight: 600; margin-left: 4px; }
+.weight-delta.up { color: var(--danger); }
+.weight-delta.down { color: var(--success); }
+.weight-delta.same { color: #6B6F63; font-weight: 500; }
 
 /* ============================================================
    Fasting Tracker page — ring timer, stages, water goal, stats
