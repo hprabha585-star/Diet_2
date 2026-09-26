@@ -69,59 +69,70 @@ async function syncChecklistWithRegimen(user, day) {
 /* Dashboard                                                            */
 /* ------------------------------------------------------------------ */
 router.get('/dashboard', requireActive, async (req, res) => {
-  const user = req.user;
+  try {
+    const user = req.user;
 
-  if (user.planMode === 'tracker') {
-    const running = await TrackerSession.findOne({ where: { userId: user.id, status: 'running' } });
-    const recent = await TrackerSession.findAll({ where: { userId: user.id }, order: [['startAt', 'DESC']], limit: 10 });
-    return res.json({
-      planMode: 'tracker',
-      user: user.toSafeJSON(),
-      running,
-      recentSessions: recent
-    });
-  }
-
-  const day = user.currentChallengeDay();
-  const { regimen, log } = await syncChecklistWithRegimen(user, day);
-  // The coach may have added or removed items since the last tick, so the
-  // day is re-scored here too — that is what stops a day from keeping
-  // points it no longer earns.
-  const score = await applyScoring(user, day);
-
-  res.json({
-    planMode: 'protocol',
-    user: user.toSafeJSON(),
-    day,
-    challengeLengthDays: user.challengeLengthDays,
-    fastingPause: { active: user.pauseActive, reason: user.pauseReason },
-    // Only raw window data goes to the client — it computes fasting/eating
-    // state and the countdown itself in the browser's local time, so the
-    // number is always correct regardless of the server's timezone.
-    regimen: regimen ? {
-      day: regimen.day,
-      startHour: regimen.startHour,
-      endHour: regimen.endHour,
-      isFullDayFast: regimen.isFullDayFast,
-      protocolType: regimen.protocolType,
-      phase: regimen.phase,
-      focus: regimen.focus,
-      dayInfo: regimen.dayInfo,
-      waterTargetMl: regimen.waterTargetMl
-    } : null,
-    checklist: {
-      meals: log.items.filter(i => i.kind === 'meal'),
-      habits: log.items.filter(i => i.kind === 'habit'),
-      completionPercent: score.percent,
-      scoredDone: score.done,          // coach items ticked
-      scoredTotal: score.total,        // coach items assigned
-      threshold: COMPLETION_THRESHOLD, // % needed to bank the day
-      pointsPerDay: POINTS_PER_DAY,
-      dayScored: score.qualifies,
-      waterMl: log.waterMl,
-      waterEntries: log.waterEntries
+    if (user.planMode === 'tracker') {
+      const running = await TrackerSession.findOne({ where: { userId: user.id, status: 'running' } });
+      const recent = await TrackerSession.findAll({ where: { userId: user.id }, order: [['startAt', 'DESC']], limit: 10 });
+      return res.json({
+        planMode: 'tracker',
+        user: user.toSafeJSON(),
+        running,
+        recentSessions: recent
+      });
     }
-  });
+
+    const day = user.currentChallengeDay();
+    const { regimen, log } = await syncChecklistWithRegimen(user, day);
+    // The coach may have added or removed items since the last tick, so the
+    // day is re-scored here too — that is what stops a day from keeping
+    // points it no longer earns.
+    const score = await applyScoring(user, day);
+
+    res.json({
+      planMode: 'protocol',
+      user: user.toSafeJSON(),
+      day,
+      challengeLengthDays: user.challengeLengthDays,
+      fastingPause: { active: user.pauseActive, reason: user.pauseReason },
+      // Only raw window data goes to the client — it computes fasting/eating
+      // state and the countdown itself in the browser's local time, so the
+      // number is always correct regardless of the server's timezone.
+      regimen: regimen ? {
+        day: regimen.day,
+        startHour: regimen.startHour,
+        endHour: regimen.endHour,
+        isFullDayFast: regimen.isFullDayFast,
+        protocolType: regimen.protocolType,
+        phase: regimen.phase,
+        focus: regimen.focus,
+        dayInfo: regimen.dayInfo,
+        waterTargetMl: regimen.waterTargetMl
+      } : null,
+      checklist: {
+        meals: log.items.filter(i => i.kind === 'meal'),
+        habits: log.items.filter(i => i.kind === 'habit'),
+        completionPercent: score.percent,
+        scoredDone: score.done,          // coach items ticked
+        scoredTotal: score.total,        // coach items assigned
+        threshold: COMPLETION_THRESHOLD, // % needed to bank the day
+        pointsPerDay: POINTS_PER_DAY,
+        dayScored: score.qualifies,
+        waterMl: log.waterMl,
+        waterEntries: log.waterEntries
+      }
+    });
+  } catch (err) {
+    // This route previously had no try/catch at all: a DB error here (e.g.
+    // a column the app expects but a migration hasn't added yet) became an
+    // unhandled promise rejection, which crashed the whole Node process
+    // instead of just failing this one request. Catching it here means a
+    // future hiccup returns a 500 to this one client instead of taking the
+    // entire site down for everyone.
+    console.error('GET /client/dashboard failed:', err);
+    res.status(500).json({ error: 'Could not load dashboard', detail: err.message });
+  }
 });
 
 /* ------------------------------------------------------------------ */
