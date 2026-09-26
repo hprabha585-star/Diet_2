@@ -106,6 +106,7 @@ router.get('/dashboard', requireActive, async (req, res) => {
       protocolType: regimen.protocolType,
       phase: regimen.phase,
       focus: regimen.focus,
+      dayInfo: regimen.dayInfo,
       waterTargetMl: regimen.waterTargetMl
     } : null,
     checklist: {
@@ -299,8 +300,13 @@ router.post('/weight', requireActive, async (req, res) => {
   try {
     const { weightKg, note } = req.body;
     if (!weightKg) return res.status(400).json({ error: 'weightKg is required' });
-    const log = await WeightLog.create({ userId: req.user.id, weightKg, note });
-    res.status(201).json({ log, bmi: req.user.bmi(weightKg), healthyWeightRange: req.user.healthyWeightRange() });
+    // BMI is computed and frozen onto the log at the moment it's saved —
+    // same "Save" action that logs the weight, so history shows the BMI
+    // as it stood on that day (needs heightCm already on the profile;
+    // null otherwise, same as req.user.bmi() would return).
+    const bmiAtLog = req.user.bmi(weightKg);
+    const log = await WeightLog.create({ userId: req.user.id, weightKg, note, bmiAtLog });
+    res.status(201).json({ log, bmi: bmiAtLog, healthyWeightRange: req.user.healthyWeightRange() });
   } catch (err) {
     res.status(500).json({ error: 'Could not log weight', detail: err.message });
   }
@@ -340,6 +346,29 @@ router.post('/profile', requireActive, async (req, res) => {
     res.json({ user: req.user.toSafeJSON() });
   } catch (err) {
     res.status(500).json({ error: 'Could not save profile', detail: err.message });
+  }
+});
+
+// GET /client/profile-summary — the small set of facts the "profile" popup
+// shows: name, age, current weight, height, BMI. Used in place of a plain
+// name in the topbar so the client can see this at a glance from any page.
+router.get('/profile-summary', requireActive, async (req, res) => {
+  try {
+    const latest = await WeightLog.findOne({ where: { userId: req.user.id }, order: [['date', 'DESC']] });
+    const currentWeightKg = latest ? latest.weightKg : req.user.startWeightKg;
+    res.json({
+      name: req.user.name,
+      age: req.user.age,
+      gender: req.user.gender,
+      heightCm: req.user.heightCm,
+      currentWeightKg,
+      bmi: req.user.bmi(currentWeightKg),
+      healthyWeightRange: req.user.healthyWeightRange(),
+      day: req.user.currentChallengeDay(),
+      challengeLengthDays: req.user.challengeLengthDays
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not load profile', detail: err.message });
   }
 });
 
