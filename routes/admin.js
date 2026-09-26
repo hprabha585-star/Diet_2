@@ -179,7 +179,8 @@ router.get('/clients/:id/regimen/:day', async (req, res) => {
       regimen: {
         day: regimen.day, startHour: regimen.startHour, endHour: regimen.endHour,
         isFullDayFast: regimen.isFullDayFast, protocolType: regimen.protocolType,
-        phase: regimen.phase, focus: regimen.focus, waterTargetMl: regimen.waterTargetMl,
+        phase: regimen.phase, focus: regimen.focus, dayInfo: regimen.dayInfo,
+        waterTargetMl: regimen.waterTargetMl,
         updatedAt: regimen.updatedAt,
         meals: regimen.meals.map(m => ({ type: m.type, name: m.name, calories: m.calories })),
         milestones: regimen.milestones.map(m => ({ itemKey: m.itemKey, label: m.label }))
@@ -195,7 +196,7 @@ router.get('/clients/:id/regimen/:day', async (req, res) => {
 router.get('/clients/:id/assigned-days', async (req, res) => {
   const rows = await Regimen.findAll({
     where: { userId: req.params.id }, order: [['day', 'ASC']],
-    attributes: ['day', 'isFullDayFast', 'focus', 'updatedAt']
+    attributes: ['day', 'isFullDayFast', 'focus', 'dayInfo', 'updatedAt']
   });
   const client = await User.findByPk(req.params.id);
   res.json({
@@ -223,7 +224,7 @@ router.patch('/clients/:id', async (req, res) => {
 });
 
 async function writeRegimen(userId, payload) {
-  const { day, startHour, endHour, isFullDayFast, protocolType, phase, focus, waterTargetMl, meals, milestones } = payload;
+  const { day, startHour, endHour, isFullDayFast, protocolType, phase, focus, dayInfo, waterTargetMl, meals, milestones } = payload;
 
   const [regimen] = await Regimen.findOrCreate({
     where: { userId, day },
@@ -235,6 +236,7 @@ async function writeRegimen(userId, payload) {
   regimen.protocolType = protocolType || 'eating_window';
   regimen.phase = phase || '';
   regimen.focus = focus || '';
+  regimen.dayInfo = dayInfo || '';
   regimen.waterTargetMl = waterTargetMl || 3000;
   await regimen.save();
 
@@ -250,39 +252,57 @@ async function writeRegimen(userId, payload) {
 }
 
 // POST /api/admin/clients/:id/assign-plan
+// Optional `repeatDays` (>=1): writes the SAME window/meals/habits/day-info
+// to `repeatDays` consecutive days starting at `day` — e.g. day=10,
+// repeatDays=6 assigns days 10,11,12,13,14,15 identically, in one action,
+// instead of the coach repeating the whole form six times.
 router.post('/clients/:id/assign-plan', async (req, res) => {
   try {
     const client = await User.findOne({ where: { id: req.params.id, role: 'client' } });
     if (!client) return res.status(404).json({ error: 'Client not found' });
     if (client.planMode !== 'protocol') return res.status(400).json({ error: 'This client is on the Fasting Tracker plan and has no coach-assigned regimen.' });
-    const day = parseInt(req.body.day, 10);
-    if (!day || day < 1) return res.status(400).json({ error: 'day must be 1 or higher' });
+    const startDay = parseInt(req.body.day, 10);
+    if (!startDay || startDay < 1) return res.status(400).json({ error: 'day must be 1 or higher' });
+    const repeatDays = Math.max(1, Math.min(90, parseInt(req.body.repeatDays, 10) || 1));
+    const endDay = startDay + repeatDays - 1;
 
     // Custom days: assigning past the end of the challenge simply extends
     // it, so the coach is never boxed in by the original 55.
-    if (day > client.challengeLengthDays) {
-      client.challengeLengthDays = day;
+    if (endDay > client.challengeLengthDays) {
+      client.challengeLengthDays = endDay;
       await client.save();
     }
 
-    const regimen = await writeRegimen(client.id, { ...req.body, day });
-    res.json({ regimen, challengeLengthDays: client.challengeLengthDays });
+    const regimens = [];
+    for (let day = startDay; day <= endDay; day++) {
+      regimens.push(await writeRegimen(client.id, { ...req.body, day }));
+    }
+    res.json({
+      regimen: regimens[0], regimens,
+      daysAssigned: { from: startDay, to: endDay, count: regimens.length },
+      challengeLengthDays: client.challengeLengthDays
+    });
   } catch (err) {
     res.status(500).json({ error: 'Could not assign plan', detail: err.message });
   }
 });
 
-// POST /api/admin/assign-plan/apply-all  — push the same day to every active protocol client
+// POST /api/admin/assign-plan/apply-all — push the same day range to every
+// active protocol client. Same `repeatDays` support as the single-client route.
 router.post('/assign-plan/apply-all', async (req, res) => {
   try {
-    const day = parseInt(req.body.day, 10);
-    if (!day || day < 1) return res.status(400).json({ error: 'day must be 1 or higher' });
+    const startDay = parseInt(req.body.day, 10);
+    if (!startDay || startDay < 1) return res.status(400).json({ error: 'day must be 1 or higher' });
+    const repeatDays = Math.max(1, Math.min(90, parseInt(req.body.repeatDays, 10) || 1));
+    const endDay = startDay + repeatDays - 1;
     const clients = await User.findAll({ where: { role: 'client', planMode: 'protocol', status: 'active' } });
     for (const c of clients) {
-      if (day > c.challengeLengthDays) { c.challengeLengthDays = day; await c.save(); }
-      await writeRegimen(c.id, { ...req.body, day });
+      if (endDay > c.challengeLengthDays) { c.challengeLengthDays = endDay; await c.save(); }
+      for (let day = startDay; day <= endDay; day++) {
+        await writeRegimen(c.id, { ...req.body, day });
+      }
     }
-    res.json({ applied: clients.length });
+    res.json({ applied: clients.length, daysAssigned: { from: startDay, to: endDay, count: repeatDays } });
   } catch (err) {
     res.status(500).json({ error: 'Could not apply plan to cohort', detail: err.message });
   }
