@@ -91,7 +91,12 @@ User.prototype.toSafeJSON = function () {
 const WeightLog = sequelize.define('WeightLog', {
   date: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
   weightKg: { type: DataTypes.FLOAT, allowNull: false },
-  note: { type: DataTypes.STRING }
+  note: { type: DataTypes.STRING },
+  // BMI computed and stored at the moment this weight was logged (needs
+  // heightCm to already be on the user's profile) — so history shows the
+  // BMI as it was on that day, not recalculated later against a height
+  // the client may since have corrected.
+  bmiAtLog: { type: DataTypes.FLOAT }
 });
 User.hasMany(WeightLog, { foreignKey: 'userId', onDelete: 'CASCADE' });
 WeightLog.belongsTo(User, { foreignKey: 'userId' });
@@ -171,6 +176,10 @@ const Regimen = sequelize.define('Regimen', {
   },
   phase: { type: DataTypes.STRING },
   focus: { type: DataTypes.STRING },
+  // Longer, coach-editable day info shown prominently on the client's
+  // Today page — separate from the one-line "focus" note above so the
+  // coach can write a fuller explanation of what the day is for.
+  dayInfo: { type: DataTypes.TEXT },
   waterTargetMl: { type: DataTypes.INTEGER, defaultValue: 3000 }
 }, {
   indexes: [{ unique: true, fields: ['user_id', 'day'] }]
