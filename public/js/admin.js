@@ -191,6 +191,8 @@ async function openAssignPlanModal(clientId, name, suggestedDay) {
   document.getElementById('assign-client-name').textContent = name;
   document.getElementById('assign-day').value = suggestedDay || 1;
   document.getElementById('assign-day-preset').value = '';
+  document.getElementById('assign-repeat-days').value = 1;
+  document.getElementById('assign-repeat-preview').textContent = '';
   document.getElementById('assign-error').style.display = 'none';
   openModal('assign-plan-modal');
   await loadAssignedDays(clientId);
@@ -199,6 +201,22 @@ async function openAssignPlanModal(clientId, name, suggestedDay) {
   // the coach had just saved.
   await loadAssignedDay();
 }
+
+// Live "Day 10 → Day 15 (6 days)" preview as the coach types a repeat count.
+function updateRepeatPreview() {
+  const day = parseInt(document.getElementById('assign-day').value, 10);
+  const repeat = parseInt(document.getElementById('assign-repeat-days').value, 10) || 1;
+  const el = document.getElementById('assign-repeat-preview');
+  if (!el) return;
+  if (!day || repeat <= 1) { el.textContent = ''; return; }
+  el.textContent = `This will write the same plan to days ${day} through ${day + repeat - 1} (${repeat} days).`;
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const dayEl = document.getElementById('assign-day');
+  const repeatEl = document.getElementById('assign-repeat-days');
+  if (dayEl) dayEl.addEventListener('input', updateRepeatPreview);
+  if (repeatEl) repeatEl.addEventListener('input', updateRepeatPreview);
+});
 
 async function loadAssignedDays(clientId) {
   try {
@@ -246,6 +264,7 @@ async function loadAssignedDay() {
     document.getElementById('assign-start').value = r.startHour;
     document.getElementById('assign-end').value = r.endHour;
     document.getElementById('assign-focus').value = r.focus || '';
+    document.getElementById('assign-dayinfo').value = r.dayInfo || '';
     document.getElementById('assign-water').value = r.waterTargetMl || 3000;
     (r.meals || []).forEach(m => addMealRow(m.type, m.name, m.calories ?? ''));
     (r.milestones || []).forEach(m => addMilestoneRow(m.label));
@@ -268,6 +287,7 @@ async function loadAssignedDay() {
       document.getElementById('assign-start').value = 9;
       document.getElementById('assign-end').value = 17;
       document.getElementById('assign-focus').value = '';
+      document.getElementById('assign-dayinfo').value = '';
       document.getElementById('assign-water').value = 3000;
       if (statusEl) {
         statusEl.className = 'assign-status custom';
@@ -310,8 +330,23 @@ function applyPresetObject(d) {
   document.getElementById('assign-start').value = d.startHour ?? 9;
   document.getElementById('assign-end').value = d.endHour ?? 17;
   document.getElementById('assign-focus').value = d.focus || '';
+  document.getElementById('assign-dayinfo').value = d.dayInfo || '';
   document.getElementById('assign-water').value = d.waterTargetMl || 3000;
   toggleAssignFullFast();
+}
+
+// One-click starter set: the coach almost always wants at least one meal
+// in each slot, and retyping the same handful of meals for every day was
+// the exact friction this was asked to remove. Uses the first matching
+// preset for each meal type when presets have loaded; falls back to a
+// plain placeholder row otherwise so the coach can still rename it.
+function addDefaultMeals() {
+  const order = ['morning_detox', 'breakfast', 'lunch', 'snack', 'dinner'];
+  order.forEach(type => {
+    const preset = mealPresets.find(m => m.type === type);
+    if (preset) addMealRow(preset.type, preset.name, preset.calories);
+    else addMealRow(type, '', '');
+  });
 }
 
 function toggleAssignFullFast() {
@@ -376,28 +411,34 @@ async function submitAssignPlan(applyAll) {
       label: r.querySelector('.milestone-label').value
     })).filter(m => m.label);
 
+    const repeatDays = Math.max(1, Math.min(90, parseInt(document.getElementById('assign-repeat-days').value, 10) || 1));
+
     const body = {
       day,
+      repeatDays,
       isFullDayFast,
       startHour: parseFloat(document.getElementById('assign-start').value),
       endHour: parseFloat(document.getElementById('assign-end').value),
       protocolType: isFullDayFast ? 'fast_24' : 'eating_window',
       focus: document.getElementById('assign-focus').value,
+      dayInfo: document.getElementById('assign-dayinfo').value,
       waterTargetMl: parseInt(document.getElementById('assign-water').value, 10) || 3000,
       meals, milestones
     };
 
+    const dayRangeLabel = repeatDays > 1 ? `days ${day}–${day + repeatDays - 1}` : `day ${day}`;
+
     if (applyAll) {
-      if (!confirm(`Apply day ${day} to every active coached client? This overwrites their plan for that day.`)) return;
+      if (!confirm(`Apply ${dayRangeLabel} to every active coached client? This overwrites their plan for ${repeatDays > 1 ? 'those days' : 'that day'}.`)) return;
       const res = await apiRequest('/admin/assign-plan/apply-all', { method: 'POST', body });
-      alert(`Applied to ${res.applied} client(s).`);
+      alert(`Applied ${dayRangeLabel} to ${res.applied} client(s).`);
     } else {
       const clientId = document.getElementById('assign-client-id').value;
       await apiRequest(`/admin/clients/${clientId}/assign-plan`, { method: 'POST', body });
       await loadAssignedDays(clientId);
       const statusEl = document.getElementById('assign-status');
       statusEl.className = 'assign-status assigned';
-      statusEl.innerHTML = `<b>Saved.</b> Day ${day} is now assigned — re-opening this window will show it.`;
+      statusEl.innerHTML = `<b>Saved.</b> ${repeatDays > 1 ? `Days ${day}–${day + repeatDays - 1} are` : `Day ${day} is`} now assigned — re-opening this window will show it.`;
     }
     await loadRoster();
   } catch (err) {
