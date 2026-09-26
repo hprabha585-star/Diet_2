@@ -57,50 +57,64 @@ router.post('/clients', async (req, res) => {
 // the admin frontend renders live state in the CLIENT's own timezone, not
 // the coach's browser time), adherence.
 router.get('/clients', async (req, res) => {
-  const clients = await User.findAll({ where: { role: 'client' }, order: [['createdAt', 'DESC']] });
-  const results = await Promise.all(clients.map(async (c) => {
-    const day = c.currentChallengeDay();
-    let regimen = null, completionPercent = null;
-    if (c.planMode === 'protocol' && day > 0) {
-      regimen = await Regimen.findOne({ where: { userId: c.id, day } });
-      const log = await ChecklistLog.findOne({ where: { userId: c.id, day } });
-      completionPercent = log ? log.completionPercent : 0;
-    }
-    return {
-      id: c.id, name: c.name, email: c.email, phone: c.phone,
-      status: c.status, planMode: c.planMode, tier: c.tier,
-      timezone: c.timezone, day, challengeLengthDays: c.challengeLengthDays,
-      points: c.points, streakCurrent: c.streakCurrent,
-      fastingPause: { active: c.pauseActive, reason: c.pauseReason },
-      window: regimen ? { startHour: regimen.startHour, endHour: regimen.endHour, isFullDayFast: regimen.isFullDayFast } : null,
-      completionPercent
-    };
-  }));
-  res.json({ clients: results });
+  try {
+    const clients = await User.findAll({ where: { role: 'client' }, order: [['createdAt', 'DESC']] });
+    const results = await Promise.all(clients.map(async (c) => {
+      const day = c.currentChallengeDay();
+      let regimen = null, completionPercent = null;
+      if (c.planMode === 'protocol' && day > 0) {
+        regimen = await Regimen.findOne({ where: { userId: c.id, day } });
+        const log = await ChecklistLog.findOne({ where: { userId: c.id, day } });
+        completionPercent = log ? log.completionPercent : 0;
+      }
+      return {
+        id: c.id, name: c.name, email: c.email, phone: c.phone,
+        status: c.status, planMode: c.planMode, tier: c.tier,
+        timezone: c.timezone, day, challengeLengthDays: c.challengeLengthDays,
+        points: c.points, streakCurrent: c.streakCurrent,
+        fastingPause: { active: c.pauseActive, reason: c.pauseReason },
+        window: regimen ? { startHour: regimen.startHour, endHour: regimen.endHour, isFullDayFast: regimen.isFullDayFast } : null,
+        completionPercent
+      };
+    }));
+    res.json({ clients: results });
+  } catch (err) {
+    // No try/catch here previously — a DB error (e.g. a column the app
+    // expects that a migration hasn't added yet) became an unhandled
+    // promise rejection and crashed the whole process, which is what took
+    // the roster (and every other page) down together.
+    console.error('GET /admin/clients failed:', err);
+    res.status(500).json({ error: 'Could not load roster', detail: err.message });
+  }
 });
 
 router.get('/clients/:id', async (req, res) => {
-  const client = await User.findOne({ where: { id: req.params.id, role: 'client' } });
-  if (!client) return res.status(404).json({ error: 'Client not found' });
-  const weightLogs = await WeightLog.findAll({ where: { userId: client.id }, order: [['date', 'ASC']] });
-  const regimens = await Regimen.findAll({
-    where: { userId: client.id }, order: [['day', 'ASC']],
-    include: [{ model: RegimenMeal, as: 'meals' }, { model: RegimenMilestone, as: 'milestones' }]
-  });
-  const checklistLogs = await ChecklistLog.findAll({ where: { userId: client.id }, order: [['day', 'ASC']] });
-  const latest = weightLogs.length ? weightLogs[weightLogs.length - 1].weightKg : null;
-  const first = weightLogs.length ? weightLogs[0].weightKg : null;
-  res.json({
-    client: client.toSafeJSON(), weightLogs, regimens, checklistLogs,
-    // Body metrics the client saved from their BMI calculator. Read-only
-    // here — the coach sees it, the client owns it.
-    body: {
-      heightCm: client.heightCm, age: client.age, gender: client.gender,
-      currentWeightKg: latest, startWeightKg: first,
-      changeKg: latest !== null && first !== null ? Math.round((latest - first) * 10) / 10 : null,
-      bmi: client.bmi(latest), healthyWeightRange: client.healthyWeightRange()
-    }
-  });
+  try {
+    const client = await User.findOne({ where: { id: req.params.id, role: 'client' } });
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+    const weightLogs = await WeightLog.findAll({ where: { userId: client.id }, order: [['date', 'ASC']] });
+    const regimens = await Regimen.findAll({
+      where: { userId: client.id }, order: [['day', 'ASC']],
+      include: [{ model: RegimenMeal, as: 'meals' }, { model: RegimenMilestone, as: 'milestones' }]
+    });
+    const checklistLogs = await ChecklistLog.findAll({ where: { userId: client.id }, order: [['day', 'ASC']] });
+    const latest = weightLogs.length ? weightLogs[weightLogs.length - 1].weightKg : null;
+    const first = weightLogs.length ? weightLogs[0].weightKg : null;
+    res.json({
+      client: client.toSafeJSON(), weightLogs, regimens, checklistLogs,
+      // Body metrics the client saved from their BMI calculator. Read-only
+      // here — the coach sees it, the client owns it.
+      body: {
+        heightCm: client.heightCm, age: client.age, gender: client.gender,
+        currentWeightKg: latest, startWeightKg: first,
+        changeKg: latest !== null && first !== null ? Math.round((latest - first) * 10) / 10 : null,
+        bmi: client.bmi(latest), healthyWeightRange: client.healthyWeightRange()
+      }
+    });
+  } catch (err) {
+    console.error('GET /admin/clients/:id failed:', err);
+    res.status(500).json({ error: 'Could not load client detail', detail: err.message });
+  }
 });
 
 router.post('/clients/:id/activate', async (req, res) => {
