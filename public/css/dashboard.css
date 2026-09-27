@@ -733,3 +733,6 @@
   width: 100%; min-height: 44px; padding: 9px 11px; border: 1px solid var(--line);
   border-radius: var(--radius-sm); font-size: 13.5px; font-family: inherit; resize: vertical;
 }
+
+/* Days-to-allocate live preview — impossible to miss when it's not 1 */
+.range-warning { color: #8F5720; font-weight: 600; }

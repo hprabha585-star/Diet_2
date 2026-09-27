@@ -19,6 +19,7 @@
     </div>
     <nav>
       <a href="#roster" class="nav-link active" data-view="roster"><span class="ico">☷</span><span>Client roster</span></a>
+      <a href="#programguide" class="nav-link" data-view="programguide"><span class="ico">✎</span><span>Program guide</span></a>
       <a href="#payments" class="nav-link" data-view="payments"><span class="ico">₹</span><span>Payment approvals</span></a>
       <a href="#leaderboard" class="nav-link" data-view="leaderboard"><span class="ico">★</span><span>Leaderboard</span></a>
       <a href="#payouts" class="nav-link" data-view="payouts"><span class="ico">↗</span><span>Referral payouts</span></a>
@@ -47,6 +48,17 @@
           <button class="btn btn-dark btn-sm" onclick="openAddClientModal()">+ Add client</button>
         </div>
         <div class="roster-list" id="roster-list"><p class="hint">Loading…</p></div>
+      </div>
+
+      <!-- PROGRAM GUIDE — a first-class page, not just a roster dropdown item.
+           Pick a coached client, then edit their day-by-day guide text. -->
+      <div class="view" id="view-programguide">
+        <div class="page-intro">
+          <h2>Program guide</h2>
+          <p class="hint">Short day-by-day notes each client sees on their own Program guide page. Pick a client to write or edit theirs.</p>
+        </div>
+        <input type="text" class="roster-search" id="guide-client-search" placeholder="Search clients…" oninput="renderProgramGuidePicker()" style="max-width:280px;padding:10px 13px;border:1px solid var(--line);border-radius:var(--radius-sm);margin-bottom:14px;">
+        <div id="guide-client-list" class="roster-list"><p class="hint">Loading…</p></div>
       </div>
 
       <!-- PAYMENTS -->
@@ -163,9 +175,9 @@
     <div class="range-row">
       <div class="field" style="max-width:170px;">
         <label>Days to allocate</label>
-        <input type="number" id="assign-days-count" min="1" max="90" value="1">
+        <input type="number" id="assign-days-count" min="1" max="90" value="1" oninput="updateRangePreview()">
       </div>
-      <p class="hint" style="margin-bottom:11px;">e.g. set to 6 to fill this same plan into the next 6 days from the day above, in one go.</p>
+      <p class="hint" style="margin-bottom:11px;" id="range-preview">Applying to day <b>—</b> only.</p>
     </div>
     <div class="assign-status" id="assign-status"></div>
 

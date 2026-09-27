@@ -85,3 +85,55 @@ public/css/dashboard.css        styles for all of the above
 
 Nothing in the Fasting Tracker (tracker.html / tracker.js) or the coach's
 payments/leaderboard/chat panels was touched.
+
+## Hotfix — 2026-09-27
+
+Three separate problems, from the "Could not save default day" error and
+the missing Program guide report:
+
+**1. `routes/auth.js` was missing from the zip entirely** — a packaging
+mistake on my end from an earlier drop, not anything wrong with your
+server. This caused `Cannot find module './routes/auth'` on every boot,
+which is the 503 crash-loop from before. Fixed — the file is back in
+this zip.
+
+**2. "Could not save default day" (500) is almost certainly `npm run
+migrate` not having been re-run** after the previous drop. That drop
+changed `Regimen.focus` from VARCHAR to TEXT and added
+`Settings.defaultDayTemplate` (JSON) — both need the migration to exist
+in the database, or any write to them fails. **Run `node utils/migrate.js`
+again now**, then retry "Save this as my default day". While you're in
+there, also check `yourdomain.com/api/health` — `"tablesCreated": true`
+with no `tableError` confirms the schema is in sync.
+
+Separately, `apiRequest()` was silently dropping the `detail` field every
+backend error already included — so a real database error like "Unknown
+column defaultDayTemplate" was showing up as the bare, undiagnosable
+"Could not save default day" with no way to tell what actually broke.
+Fixed in `public/js/api.js` — every error anywhere in the app now shows
+its real cause, not just the generic label.
+
+**3. Assigning day 8 silently applied to 8 days (8 through 15) — no
+confirmation.** The "Days to allocate" field defaults to 1 and is never
+touched by anything else in the code, so this was very likely 8 typed
+into that box by mistake — but the real bug is that applying to a single
+client had **no confirmation at all**, even for an 8-day range (only
+"Apply to ALL" asked first). Fixed two ways:
+- A live preview line now shows exactly what "Apply" will do —
+  "Applying to day 8 only" vs "Applying to 8 days — day 8 through day 15"
+  — updating as you type, before you click anything.
+- Applying more than one day to a single client now asks for
+  confirmation first, same as it already did for "Apply to ALL".
+
+**There's no version history**, so whatever was previously on days 9-15
+for that client is gone if it differed from day 8's plan — you'll need
+to re-enter the correct content for those days by hand if so. Sorry for
+the trouble; the missing confirmation above is what should have caught
+this before it happened.
+
+**4. Program guide wasn't visible enough** — it existed (roster -> "..."
+menu) but that's easy to miss. It's now also a full sidebar item:
+**Program guide**, which lists every coached client with a button to
+open their day-by-day editor directly, no dropdown-hunting required.
+
+Same deploy steps as before: back up, upload, `npm run migrate`, restart.

@@ -27,7 +27,14 @@ async function apiRequest(path, { method = 'GET', body, auth = true } = {}) {
   });
   let data = {};
   try { data = await res.json(); } catch { /* empty body */ }
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  if (!res.ok) {
+    // Every backend route replies with { error, detail } on failure —
+    // `detail` carries the real cause (a DB column that doesn't exist
+    // yet, a validation message, etc.). Dropping it left every failure
+    // in the app looking like a bare, undiagnosable "Could not X".
+    const message = data.detail ? `${data.error || 'Request failed'}: ${data.detail}` : (data.error || `Request failed (${res.status})`);
+    throw new Error(message);
+  }
   return data;
 }
 

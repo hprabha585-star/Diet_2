@@ -51,6 +51,7 @@ async function loadRoster() {
   const data = await apiRequest('/admin/clients');
   roster = data.clients;
   renderRoster();
+  renderProgramGuidePicker();
 }
 
 function renderRoster() {
@@ -85,6 +86,30 @@ function renderRoster() {
       </div>
     </div>
   `).join('') : '<p class="hint">No clients yet.</p>';
+}
+
+/* ------------------------------------------------------------------ */
+/* Program guide — client picker (the sidebar page). Only coached-      */
+/* protocol clients have a day-by-day regimen to write a guide for;      */
+/* Fasting Tracker clients have no coach-assigned days.                  */
+/* ------------------------------------------------------------------ */
+function renderProgramGuidePicker() {
+  const listEl = document.getElementById('guide-client-list');
+  if (!listEl) return; // view not in the DOM yet on first paint — fine, loadRoster() re-renders it
+  const q = (document.getElementById('guide-client-search').value || '').toLowerCase();
+  const list = roster.filter(c => c.planMode === 'protocol' && (!q || c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q)));
+  listEl.innerHTML = list.length ? list.map(c => `
+    <div class="roster-card">
+      <div class="roster-main">
+        <div class="roster-avatar">${esc(c.name.slice(0, 1).toUpperCase())}</div>
+        <div style="min-width:0;">
+          <div class="roster-name">${esc(c.name)}</div>
+          <div class="roster-meta">${esc(c.email)} · ${c.tier ? esc(c.tier) : 'no plan'} · day ${c.day || '—'}</div>
+        </div>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="openProgramGuideModal(${c.id}, '${jsStr(c.name)}')">Open program guide</button>
+    </div>
+  `).join('') : '<p class="hint">No coached clients yet — Fasting Tracker clients don\'t have a day-by-day guide.</p>';
 }
 
 function toggleRosterMenu(id) {
@@ -195,6 +220,7 @@ async function openAssignPlanModal(clientId, name, suggestedDay) {
   document.getElementById('assign-day-preset').value = '';
   document.getElementById('assign-error').style.display = 'none';
   openModal('assign-plan-modal');
+  updateRangePreview();
   await loadAssignedDays(clientId);
   // Load whatever is ALREADY assigned for this day instead of opening a
   // blank form — that was the bug: re-opening Assign plan hid the plan
@@ -298,6 +324,22 @@ function loadDayDefaultsInto(day) {
 function fillDayDefaults() {
   // Day box changed — reload what that day actually holds.
   loadAssignedDay();
+  updateRangePreview();
+}
+
+// Live, impossible-to-miss preview of exactly which days "Apply" will
+// touch. This is what was missing when a coach typed "8" into Days to
+// allocate meaning to reinforce day 8, and it silently overwrote days
+// 8 through 15 instead of just day 8.
+function updateRangePreview() {
+  const el = document.getElementById('range-preview');
+  if (!el) return;
+  const day = parseInt(document.getElementById('assign-day').value, 10) || 0;
+  const count = Math.max(1, parseInt(document.getElementById('assign-days-count').value, 10) || 1);
+  if (!day) { el.innerHTML = 'Applying to day <b>—</b> only.'; return; }
+  el.innerHTML = count <= 1
+    ? `Applying to <b>day ${day} only</b>.`
+    : `<span class="range-warning">Applying to <b>${count} days — day ${day} through day ${day + count - 1}</b>. Leave this at 1 to affect only day ${day}.</span>`;
 }
 
 function applyPreset() {
@@ -397,6 +439,12 @@ async function submitAssignPlan(applyAll) {
       const res = await apiRequest('/admin/assign-plan/apply-all', { method: 'POST', body });
       alert(`Applied ${rangeLabel} to ${res.applied} client(s).`);
     } else {
+      // A single confirmation, but only when it can actually do damage:
+      // more than one day means it overwrites whatever was already
+      // assigned across the whole range, not just the day in the "Day"
+      // box. This step was missing — the exact gap that let a coach's
+      // "8" in Days to allocate silently overwrite 8 days instead of 1.
+      if (days > 1 && !confirm(`This overwrites this client's plan for ${rangeLabel} (${days} days), not just day ${day}. Continue?`)) return;
       const clientId = document.getElementById('assign-client-id').value;
       const res = await apiRequest(`/admin/clients/${clientId}/assign-plan`, { method: 'POST', body });
       await loadAssignedDays(clientId);
