@@ -19,6 +19,8 @@ async function init() {
     });
   });
 
+  document.getElementById('topbar-title').textContent = formatTodayHeading();
+
   await loadDashboard();
   loadProgress();
   loadAlerts();
@@ -27,14 +29,75 @@ async function init() {
   loadReferral();
 }
 
+// "Today" replaced with the actual date + weekday, e.g. "Saturday, 26 Sep".
+function formatTodayHeading() {
+  return new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' });
+}
+
+// Views that don't correspond to a sidebar nav-link any more (Alerts now
+// lives behind the topbar bell, not the sidebar) still need a title.
+const VIEW_TITLES = { alerts: 'Alerts' };
+
 function showView(view) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-link').forEach(a => a.classList.remove('active'));
-  document.getElementById(`view-${view}`).classList.add('active');
-  document.querySelector(`.nav-link[data-view="${view}"]`).classList.add('active');
-  document.getElementById('topbar-title').textContent = document.querySelector(`.nav-link[data-view="${view}"] span:nth-child(2)`).textContent;
+  const viewEl = document.getElementById(`view-${view}`);
+  if (viewEl) viewEl.classList.add('active');
+  const navEl = document.querySelector(`.nav-link[data-view="${view}"]`);
+  if (navEl) navEl.classList.add('active');
+
+  document.getElementById('topbar-title').textContent = view === 'today'
+    ? formatTodayHeading()
+    : (VIEW_TITLES[view] || (navEl ? navEl.querySelector('span:nth-child(2)').textContent : ''));
+
   closeSidebar();
   if (view === 'chat') loadChat();
+  if (view === 'history') loadHistoryPage();
+  if (view === 'guide') loadProgramGuide();
+}
+
+/* ------------------------------------------------------------------ */
+/* Profile popup                                                        */
+/* ------------------------------------------------------------------ */
+async function openProfileModal() {
+  openModal('profile-modal');
+  const body = document.getElementById('profile-modal-body');
+  body.innerHTML = '<p class="hint">Loading…</p>';
+  try {
+    const p = await apiRequest('/client/profile-summary');
+    body.innerHTML = `
+      <div class="profile-grid">
+        <div class="profile-cell"><span>Name</span><b>${esc(p.name)}</b></div>
+        <div class="profile-cell"><span>Age</span><b>${p.age ?? '—'}</b></div>
+        <div class="profile-cell"><span>Height</span><b>${p.heightCm ? p.heightCm + ' cm' : '—'}</b></div>
+        <div class="profile-cell"><span>Current weight</span><b>${p.currentWeightKg ?? '—'}${p.currentWeightKg ? ' kg' : ''}</b></div>
+        <div class="profile-cell"><span>BMI</span><b>${p.bmi ?? '—'}</b></div>
+        ${p.day !== null ? `<div class="profile-cell"><span>Day</span><b>${p.day} / ${p.challengeLengthDays}</b></div>` : ''}
+      </div>
+      ${!p.heightCm || !p.currentWeightKg ? `<p class="hint" style="margin-top:14px;">
+        Add your height and weight from <a href="#history" onclick="closeModal('profile-modal');showView('history')">History &amp; weight</a> to see your BMI here.</p>` : ''}`;
+  } catch (err) {
+    body.innerHTML = `<p class="error-text">${esc(err.message)}</p>`;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Program guide — day-by-day info the coach writes, read-only here     */
+/* ------------------------------------------------------------------ */
+async function loadProgramGuide() {
+  const el = document.getElementById('guide-list');
+  try {
+    const data = await apiRequest('/client/program-guide');
+    if (!data.days.length) { el.innerHTML = '<p class="hint">Nothing here yet — check back once your coach assigns a plan.</p>'; return; }
+    el.innerHTML = data.days.map(d => `
+      <div class="card guide-row ${d.day === data.currentDay ? 'today' : ''} ${!d.assigned ? 'unassigned' : ''}">
+        <div class="guide-day">Day ${d.day}${d.day === data.currentDay ? ' <span class="badge badge-active">Today</span>' : ''}</div>
+        ${d.phase ? `<div class="guide-phase">${esc(d.phase)}</div>` : ''}
+        <div class="guide-focus">${d.focus ? esc(d.focus) : '<span class="hint">Not written yet.</span>'}</div>
+      </div>`).join('');
+  } catch (err) {
+    el.innerHTML = `<p class="hint">${esc(err.message)}</p>`;
+  }
 }
 
 function openSidebar() { document.getElementById('sidebar').classList.add('open'); document.getElementById('sidebar-scrim').classList.add('show'); }
@@ -323,25 +386,59 @@ async function resumeFasting() {
 /* own clock — never trust server time for the display.                */
 /* ------------------------------------------------------------------ */
 function tick() {
-  if (dashboardData && dashboardData.planMode === 'protocol' && dashboardData.regimen) {
-    const fs = computeFastingState(dashboardData.regimen, dashboardData.fastingPause.active, dashboardData.fastingPause.reason);
-    const fastEl = document.getElementById('fast-state');
-    const eatEl = document.getElementById('eat-state');
-    if (fs.state === 'paused') {
-      fastEl.textContent = 'Paused'; eatEl.textContent = 'Paused';
-      document.getElementById('fast-countdown').textContent = '--:--:--';
-      document.getElementById('eat-countdown').textContent = '--:--:--';
-      return;
-    }
-    if (fs.state === 'fasting') {
-      fastEl.textContent = 'Active now'; eatEl.textContent = 'Opens soon';
-      document.getElementById('fast-countdown').textContent = fmtCountdown(fs.secondsRemaining);
-      document.getElementById('eat-countdown').textContent = fmtCountdown(fs.secondsRemaining);
-    } else {
-      fastEl.textContent = 'Starts soon'; eatEl.textContent = 'Active now';
-      document.getElementById('fast-countdown').textContent = fmtCountdown(fs.secondsRemaining);
-      document.getElementById('eat-countdown').textContent = fmtCountdown(fs.secondsRemaining);
-    }
+  if (!(dashboardData && dashboardData.planMode === 'protocol' && dashboardData.regimen)) return;
+  const regimen = dashboardData.regimen;
+  const { startHour, endHour, isFullDayFast } = regimen;
+
+  // Exact clock times, worked out once per tick (cheap) rather than
+  // re-deriving them on every dashboard reload.
+  if (isFullDayFast) {
+    document.getElementById('fast-starts').textContent = fmtHour12(startHour);
+    document.getElementById('fast-ends').textContent = fmtHour12(startHour);
+    document.getElementById('eat-starts').textContent = '—';
+    document.getElementById('eat-ends').textContent = '—';
+  } else {
+    document.getElementById('fast-starts').textContent = fmtHour12(endHour);   // eating closes -> fasting starts
+    document.getElementById('fast-ends').textContent = fmtHour12(startHour);   // fasting ends -> eating opens
+    document.getElementById('eat-starts').textContent = fmtHour12(startHour);
+    document.getElementById('eat-ends').textContent = fmtHour12(endHour);
+  }
+
+  const fs = computeFastingState(regimen, dashboardData.fastingPause.active, dashboardData.fastingPause.reason);
+  const fastStateEl = document.getElementById('fast-state');
+  const eatStateEl = document.getElementById('eat-state');
+  const fastTimerEl = document.getElementById('fast-countdown');
+  const eatTimerEl = document.getElementById('eat-countdown');
+  const fastLabelEl = document.getElementById('fast-timer-label');
+  const eatLabelEl = document.getElementById('eat-timer-label');
+
+  if (fs.state === 'paused') {
+    fastStateEl.textContent = 'Paused'; eatStateEl.textContent = 'Paused';
+    fastTimerEl.textContent = '00:00:00'; eatTimerEl.textContent = '00:00:00';
+    fastLabelEl.textContent = ''; eatLabelEl.textContent = '';
+    return;
+  }
+
+  // eatingHours handles a window that wraps past midnight (e.g. starts
+  // 20:00, ends 04:00) the same way computeFastingState does.
+  const eatingHours = isFullDayFast ? 0
+    : (startHour <= endHour ? endHour - startHour : 24 - startHour + endHour);
+  const fastingHours = 24 - eatingHours;
+
+  if (fs.state === 'fasting') {
+    const elapsed = Math.max(0, fastingHours * 3600 - fs.secondsRemaining);
+    fastStateEl.textContent = 'Active now'; eatStateEl.textContent = 'Opens soon';
+    fastTimerEl.textContent = fmtCountdown(elapsed);      // counts UP
+    fastLabelEl.textContent = 'elapsed';
+    eatTimerEl.textContent = fmtCountdown(fs.secondsRemaining); // counts down to start
+    eatLabelEl.textContent = 'until it starts';
+  } else {
+    const elapsed = Math.max(0, eatingHours * 3600 - fs.secondsRemaining);
+    fastStateEl.textContent = 'Starts soon'; eatStateEl.textContent = 'Active now';
+    eatTimerEl.textContent = fmtCountdown(elapsed);        // counts UP
+    eatLabelEl.textContent = 'elapsed';
+    fastTimerEl.textContent = fmtCountdown(fs.secondsRemaining); // counts down to start
+    fastLabelEl.textContent = 'until it starts';
   }
 }
 
@@ -355,11 +452,25 @@ function tick() {
 async function loadHistoryPage(opts = {}) {
   try {
     const data = await apiRequest('/client/history');
-    document.getElementById('weight-list').innerHTML = (data.weightLogs || []).slice().reverse().map(w => `
-      <div class="row-between" style="padding:10px 0;border-top:1px solid var(--line);">
-        <span>${w.weightKg} kg — ${new Date(w.date).toLocaleDateString()}</span>
+
+    // Day-by-day progress: each entry compared to the one before it
+    // (chronologically), so the list shows whether weight went up, down,
+    // or stayed flat since the last log — not just the raw numbers.
+    const chrono = (data.weightLogs || []).slice().sort((a, b) => new Date(a.date) - new Date(b.date));
+    const withDelta = chrono.map((w, i) => ({
+      ...w,
+      delta: i > 0 ? Math.round((w.weightKg - chrono[i - 1].weightKg) * 10) / 10 : null
+    }));
+    document.getElementById('weight-list').innerHTML = withDelta.slice().reverse().map(w => {
+      const deltaHtml = w.delta === null ? ''
+        : w.delta === 0 ? '<span class="delta flat">no change</span>'
+        : w.delta > 0 ? `<span class="delta up">▲ ${w.delta} kg</span>`
+        : `<span class="delta down">▼ ${Math.abs(w.delta)} kg</span>`;
+      return `<div class="row-between weight-row" style="padding:10px 0;border-top:1px solid var(--line);">
+        <span>${w.weightKg} kg — ${new Date(w.date).toLocaleDateString()} ${deltaHtml}</span>
         <button class="btn-ghost btn-sm" onclick="deleteWeight(${w.id})">Delete</button>
-      </div>`).join('') || '<p class="hint">No entries yet.</p>';
+      </div>`;
+    }).join('') || '<p class="hint">No entries yet.</p>';
 
     // Pre-fill the calculator with whatever we already know, so returning
     // to this page doesn't make the person retype everything.
@@ -375,9 +486,6 @@ async function loadHistoryPage(opts = {}) {
     if (!opts.keepResult) document.getElementById('bmi-result').innerHTML = '';
   } catch (err) { /* ignore if not active yet */ }
 }
-document.addEventListener('DOMContentLoaded', () => {
-  document.querySelector('.nav-link[data-view="history"]').addEventListener('click', loadHistoryPage);
-});
 
 /* ------------------------------------------------------------------ */
 /* BMI calculator — gauge + full read-out                              */
@@ -567,7 +675,25 @@ async function logWeight() {
     if (!weightKg) return;
     await apiRequest('/client/weight', { method: 'POST', body: { weightKg } });
     document.getElementById('weight-input').value = '';
-    await loadHistoryPage();
+
+    // Like the BMI calculator's own "Save this", this single Save button
+    // now also carries height/age/gender if they're already filled in
+    // below — one click updates the weight log AND the body profile, and
+    // the BMI card recalculates itself immediately.
+    const heightCm = parseFloat(document.getElementById('height-input').value);
+    const age = parseInt(document.getElementById('age-input').value, 10);
+    const gender = document.getElementById('gender-input').value;
+    if (heightCm) {
+      const res = await apiRequest('/client/profile', {
+        method: 'POST',
+        body: { heightCm, age: age || undefined, gender: gender || undefined }
+      });
+      if (res && res.user) { currentUser = res.user; setSession(getToken(), res.user); }
+    }
+    document.getElementById('bmi-weight-input').value = weightKg;
+
+    await loadHistoryPage({ keepResult: true });
+    if (heightCm) calculateBmi();
   } catch (err) { alert(err.message); }
 }
 async function deleteWeight(id) {
@@ -582,7 +708,7 @@ async function deleteWeight(id) {
 async function loadAlerts() {
   try {
     const data = await apiRequest('/client/alerts');
-    const badge = document.getElementById('badge-alerts');
+    const badge = document.getElementById('badge-alerts-bell');
     badge.hidden = data.unread === 0;
     badge.textContent = data.unread;
     document.getElementById('alerts-list').innerHTML = data.alerts.length ? data.alerts.map(a => `

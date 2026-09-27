@@ -84,6 +84,19 @@ function computeFastingState(window, pauseActive, pauseReason) {
   return { state: inEatingWindow ? 'eating' : 'fasting', secondsRemaining: Math.round(diff * 3600) };
 }
 
+// 24h float hour (e.g. 20.5) -> "8:30 PM", in the browser's own reading —
+// this is a label, not a timezone conversion, so it just formats the
+// number the way a clock face would show it.
+function fmtHour12(hourFloat) {
+  const t = ((hourFloat % 24) + 24) % 24;
+  let hh = Math.floor(t);
+  const mm = Math.round((t - hh) * 60);
+  const period = hh >= 12 ? 'PM' : 'AM';
+  let h12 = hh % 12;
+  if (h12 === 0) h12 = 12;
+  return `${h12}:${String(mm).padStart(2, '0')} ${period}`;
+}
+
 function fmtCountdown(totalSeconds) {
   const s = Math.max(0, Math.round(totalSeconds));
   const hh = Math.floor(s / 3600), mm = Math.floor((s % 3600) / 60), ss = s % 60;

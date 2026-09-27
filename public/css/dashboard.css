@@ -652,3 +652,84 @@
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: #D8D4C6; border-radius: 100px; border: 3px solid var(--paper); }
 ::-webkit-scrollbar-thumb:hover { background: #BFBAA8; }
+
+/* ============================================================
+   Topbar: alerts bell beside the clickable profile chip
+   ============================================================ */
+.topbar-right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.bell-btn {
+  position: relative; background: none; border: none; font-size: 18px;
+  line-height: 1; padding: 8px; border-radius: 100px; cursor: pointer;
+  color: #55594E;
+}
+.bell-btn:hover { background: rgba(0,0,0,0.04); }
+.bell-badge {
+  position: absolute; top: 2px; right: 2px; min-width: 15px; height: 15px;
+  padding: 0 3px; border-radius: 100px; background: var(--danger); color: #fff;
+  font-size: 10px; font-weight: 700; line-height: 15px; text-align: center;
+}
+.user-chip {
+  font-size: 13.5px; color: #6B6F63; background: none; border: none;
+  cursor: pointer; padding: 8px 4px; border-radius: var(--radius-sm);
+  font-family: inherit;
+}
+.user-chip:hover { color: var(--ink); background: rgba(0,0,0,0.04); }
+
+/* ============================================================
+   Fasting panels: exact start/end clock times + ascending timer
+   ============================================================ */
+.panel-times {
+  display: flex; justify-content: center; gap: 18px; font-size: 12.5px;
+  color: #6B6F63; margin-bottom: 10px;
+}
+.panel-times b { font-family: var(--font-display); font-weight: 600; color: var(--ink); margin-left: 4px; }
+.panel-timer-label { font-size: 11.5px; color: #6B6F63; text-transform: uppercase; letter-spacing: 0.4px; margin-top: 4px; }
+
+/* ============================================================
+   Profile popup
+   ============================================================ */
+.profile-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
+.profile-cell {
+  background: var(--paper); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); padding: 11px 13px;
+}
+.profile-cell span { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: #6B6F63; }
+.profile-cell b { font-family: var(--font-display); font-size: 17px; font-weight: 600; }
+
+/* ============================================================
+   Weight progress deltas
+   ============================================================ */
+.delta { font-size: 12px; font-weight: 700; margin-left: 8px; }
+.delta.up { color: var(--danger); }
+.delta.down { color: var(--success); }
+.delta.flat { color: #6B6F63; font-weight: 500; }
+
+/* ============================================================
+   Program guide (client) + Assign-plan range & default-day (admin)
+   ============================================================ */
+.page-intro { margin-bottom: 18px; }
+.page-intro h2 { font-size: 22px; letter-spacing: -0.3px; }
+
+.guide-row { margin-bottom: 10px; padding: 16px 18px; }
+.guide-row.today { border-color: var(--ember); box-shadow: 0 0 0 3px rgba(184,117,46,0.1); }
+.guide-row.unassigned { opacity: 0.6; }
+.guide-day { font-family: var(--font-display); font-size: 16px; }
+.guide-day .badge { margin-left: 8px; }
+.guide-phase { font-size: 12px; color: var(--ember); font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; margin-top: 4px; }
+.guide-focus { font-size: 14px; color: #3C4A41; margin-top: 8px; line-height: 1.5; }
+
+.range-row { display: flex; align-items: flex-end; gap: 10px; margin-top: 10px; }
+.range-row .field { margin-bottom: 0; }
+.default-day-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 14px; }
+
+.guide-editor-row {
+  padding: 14px 0; border-top: 1px solid var(--line);
+  display: grid; grid-template-columns: 70px 1fr; gap: 12px; align-items: start;
+}
+.guide-editor-row:first-child { border-top: none; }
+.guide-editor-row.current-day { background: rgba(184,117,46,0.05); margin: 0 -18px; padding: 14px 18px; border-radius: var(--radius-sm); }
+.guide-editor-day { font-family: var(--font-display); font-size: 15px; padding-top: 8px; }
+.guide-editor-row textarea {
+  width: 100%; min-height: 44px; padding: 9px 11px; border: 1px solid var(--line);
+  border-radius: var(--radius-sm); font-size: 13.5px; font-family: inherit; resize: vertical;
+}

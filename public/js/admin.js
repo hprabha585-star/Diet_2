@@ -76,6 +76,7 @@ function renderRoster() {
           <div class="roster-menu-list">
             ${c.status === 'pending_payment' ? `<button onclick="activateClient(${c.id})">Activate now</button>` : ''}
             ${c.planMode === 'protocol' ? `<button onclick="openAssignPlanModal(${c.id}, '${jsStr(c.name)}', ${c.day || 1})">Assign plan</button>` : ''}
+            ${c.planMode === 'protocol' ? `<button onclick="openProgramGuideModal(${c.id}, '${jsStr(c.name)}')">Program guide</button>` : ''}
             <button onclick="openAdminPauseModal(${c.id}, ${c.fastingPause.active})">${c.fastingPause.active ? 'Resume fasting' : 'Pause fasting'}</button>
             <button onclick="openClientDetail(${c.id})">View details &amp; BMI</button>
             <button onclick="openResetPasswordModal(${c.id})">Reset password</button>
@@ -190,6 +191,7 @@ async function openAssignPlanModal(clientId, name, suggestedDay) {
   document.getElementById('assign-client-id').value = clientId;
   document.getElementById('assign-client-name').textContent = name;
   document.getElementById('assign-day').value = suggestedDay || 1;
+  document.getElementById('assign-days-count').value = 1;
   document.getElementById('assign-day-preset').value = '';
   document.getElementById('assign-error').style.display = 'none';
   openModal('assign-plan-modal');
@@ -365,6 +367,7 @@ async function submitAssignPlan(applyAll) {
     const isFullDayFast = document.getElementById('assign-fullfast').checked;
     const day = parseInt(document.getElementById('assign-day').value, 10);
     if (!day || day < 1) throw new Error('Enter a day number of 1 or higher.');
+    const days = Math.max(1, parseInt(document.getElementById('assign-days-count').value, 10) || 1);
 
     const meals = [...document.querySelectorAll('#assign-meals-rows .meal-row')].map(r => ({
       type: r.querySelector('.meal-type').value,
@@ -377,7 +380,7 @@ async function submitAssignPlan(applyAll) {
     })).filter(m => m.label);
 
     const body = {
-      day,
+      day, days,
       isFullDayFast,
       startHour: parseFloat(document.getElementById('assign-start').value),
       endHour: parseFloat(document.getElementById('assign-end').value),
@@ -387,23 +390,109 @@ async function submitAssignPlan(applyAll) {
       meals, milestones
     };
 
+    const rangeLabel = days > 1 ? `days ${day}–${day + days - 1}` : `day ${day}`;
+
     if (applyAll) {
-      if (!confirm(`Apply day ${day} to every active coached client? This overwrites their plan for that day.`)) return;
+      if (!confirm(`Apply ${rangeLabel} to every active coached client? This overwrites their plan for ${days > 1 ? 'those days' : 'that day'}.`)) return;
       const res = await apiRequest('/admin/assign-plan/apply-all', { method: 'POST', body });
-      alert(`Applied to ${res.applied} client(s).`);
+      alert(`Applied ${rangeLabel} to ${res.applied} client(s).`);
     } else {
       const clientId = document.getElementById('assign-client-id').value;
-      await apiRequest(`/admin/clients/${clientId}/assign-plan`, { method: 'POST', body });
+      const res = await apiRequest(`/admin/clients/${clientId}/assign-plan`, { method: 'POST', body });
       await loadAssignedDays(clientId);
       const statusEl = document.getElementById('assign-status');
       statusEl.className = 'assign-status assigned';
-      statusEl.innerHTML = `<b>Saved.</b> Day ${day} is now assigned — re-opening this window will show it.`;
+      statusEl.innerHTML = `<b>Saved.</b> ${days > 1 ? `Days ${res.days[0]}–${res.days[res.days.length - 1]} are` : `Day ${day} is`} now assigned — re-opening this window will show it.`;
     }
     await loadRoster();
   } catch (err) {
     errEl.textContent = err.message;
     errEl.style.display = 'block';
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Default day template — a reusable window+meals+habits set so a       */
+/* normal day doesn't have to be retyped from scratch every time.       */
+/* ------------------------------------------------------------------ */
+async function saveAsDefaultDay() {
+  try {
+    const isFullDayFast = document.getElementById('assign-fullfast').checked;
+    const meals = [...document.querySelectorAll('#assign-meals-rows .meal-row')].map(r => ({
+      type: r.querySelector('.meal-type').value,
+      name: r.querySelector('.meal-name').value,
+      calories: parseInt(r.querySelector('.meal-cal').value, 10) || undefined
+    })).filter(m => m.name);
+    const milestones = [...document.querySelectorAll('#assign-milestones-rows .milestone-row')].map(r => ({
+      label: r.querySelector('.milestone-label').value
+    })).filter(m => m.label);
+
+    if (!meals.length && !milestones.length) {
+      return alert('Add at least one meal or habit below before saving it as your default day.');
+    }
+
+    await apiRequest('/admin/default-day-template', {
+      method: 'PUT',
+      body: {
+        isFullDayFast,
+        startHour: parseFloat(document.getElementById('assign-start').value),
+        endHour: parseFloat(document.getElementById('assign-end').value),
+        focus: document.getElementById('assign-focus').value,
+        waterTargetMl: parseInt(document.getElementById('assign-water').value, 10) || 3000,
+        meals, milestones
+      }
+    });
+    alert('Saved as your default day. Use "Load my default day" on any day from now on.');
+  } catch (err) { alert(err.message); }
+}
+
+async function loadDefaultDayIntoForm() {
+  try {
+    const data = await apiRequest('/admin/default-day-template');
+    if (!data.template) return alert('You haven\'t saved a default day yet — build one below, then "Save this as my default day".');
+    const t = data.template;
+    document.getElementById('assign-meals-rows').innerHTML = '';
+    document.getElementById('assign-milestones-rows').innerHTML = '';
+    document.getElementById('assign-fullfast').checked = !!t.isFullDayFast;
+    document.getElementById('assign-start').value = t.startHour ?? 9;
+    document.getElementById('assign-end').value = t.endHour ?? 17;
+    document.getElementById('assign-focus').value = t.focus || '';
+    document.getElementById('assign-water').value = t.waterTargetMl || 3000;
+    (t.meals || []).forEach(m => addMealRow(m.type, m.name, m.calories ?? ''));
+    (t.milestones || []).forEach(m => addMilestoneRow(m.label));
+    toggleAssignFullFast();
+    const statusEl = document.getElementById('assign-status');
+    statusEl.className = 'assign-status unassigned';
+    statusEl.innerHTML = `<b>Loaded your default day</b> (saved ${new Date(t.savedAt).toLocaleDateString()}). Nothing is saved until you apply.`;
+  } catch (err) { alert(err.message); }
+}
+
+/* ------------------------------------------------------------------ */
+/* Program guide — per-day text the client reads, edited independently  */
+/* of full meal assignment (quick day-info touch-ups).                  */
+/* ------------------------------------------------------------------ */
+async function openProgramGuideModal(clientId, name) {
+  document.getElementById('guide-client-name').textContent = name;
+  openModal('program-guide-modal');
+  const el = document.getElementById('program-guide-editor');
+  el.innerHTML = '<p class="hint">Loading…</p>';
+  try {
+    const data = await apiRequest(`/admin/clients/${clientId}/program-guide`);
+    el.innerHTML = data.days.map(d => `
+      <div class="guide-editor-row ${d.day === data.currentDay ? 'current-day' : ''}">
+        <div class="guide-editor-day">Day ${d.day}${d.day === data.currentDay ? ' <span class="badge badge-active">Today</span>' : ''}</div>
+        <textarea placeholder="What's this day about?"
+          onblur="saveDayFocus(${clientId}, ${d.day}, this.value)">${esc(d.focus || '')}</textarea>
+      </div>`).join('');
+  } catch (err) {
+    el.innerHTML = `<p class="error-text">${esc(err.message)}</p>`;
+  }
+}
+
+async function saveDayFocus(clientId, day, focus) {
+  try {
+    await apiRequest(`/admin/clients/${clientId}/regimen/${day}/focus`, { method: 'PATCH', body: { focus } });
+  } catch (err) { alert(`Could not save day ${day}: ${err.message}`); }
 }
 
 /* ------------------------------------------------------------------ */

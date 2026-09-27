@@ -346,7 +346,53 @@ router.post('/profile', requireActive, async (req, res) => {
 router.get('/history', requireActive, async (req, res) => {
   const weightLogs = await WeightLog.findAll({ where: { userId: req.user.id }, order: [['date', 'ASC']] });
   const checklistLogs = await ChecklistLog.findAll({ where: { userId: req.user.id }, order: [['day', 'ASC']] });
-  res.json({ weightLogs, checklistLogs, bmi: req.user.bmi(), healthyWeightRange: req.user.healthyWeightRange() });
+  // BMI from the LATEST logged weight, not the one-time startWeightKg —
+  // otherwise this number goes stale the moment the client logs a new
+  // weight, even though the weight list right above it has moved on.
+  const latestWeightKg = weightLogs.length ? weightLogs[weightLogs.length - 1].weightKg : null;
+  res.json({ weightLogs, checklistLogs, bmi: req.user.bmi(latestWeightKg), healthyWeightRange: req.user.healthyWeightRange() });
+});
+
+// GET /client/profile-summary — the small set of facts the profile popup
+// shows: name, age, height, current weight, BMI, and where they are in
+// the programme. Kept separate from /history so the popup is a single
+// cheap call.
+router.get('/profile-summary', requireActive, async (req, res) => {
+  const user = req.user;
+  const latest = await WeightLog.findOne({ where: { userId: user.id }, order: [['date', 'DESC']] });
+  const currentWeightKg = latest ? latest.weightKg : null;
+  res.json({
+    name: user.name,
+    age: user.age || null,
+    gender: user.gender || '',
+    heightCm: user.heightCm || null,
+    currentWeightKg,
+    bmi: user.bmi(currentWeightKg),
+    healthyWeightRange: user.healthyWeightRange(),
+    day: user.planMode === 'protocol' ? user.currentChallengeDay() : null,
+    challengeLengthDays: user.challengeLengthDays,
+    points: user.points,
+    streakCurrent: user.streakCurrent
+  });
+});
+
+// GET /client/program-guide — the day-by-day "what's coming" text the
+// coach writes per day (Regimen.focus/phase). Read-only here; the coach
+// edits it from the roster's Program guide button.
+router.get('/program-guide', requireActive, async (req, res) => {
+  const user = req.user;
+  if (user.planMode !== 'protocol') return res.json({ days: [] });
+  const regimens = await Regimen.findAll({
+    where: { userId: user.id }, order: [['day', 'ASC']],
+    attributes: ['day', 'phase', 'focus', 'protocolType']
+  });
+  const byDay = new Map(regimens.map(r => [r.day, r]));
+  const days = [];
+  for (let d = 1; d <= user.challengeLengthDays; d++) {
+    const r = byDay.get(d);
+    days.push({ day: d, phase: r ? r.phase : '', focus: r ? r.focus : '', assigned: !!r });
+  }
+  res.json({ days, currentDay: user.currentChallengeDay() });
 });
 
 /* ------------------------------------------------------------------ */

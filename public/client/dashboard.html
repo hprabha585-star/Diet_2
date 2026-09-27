@@ -20,7 +20,7 @@
     <nav>
       <a href="#today" class="nav-link active" data-view="today"><span class="ico">☉</span><span>Today</span></a>
       <a href="#history" class="nav-link" data-view="history"><span class="ico">☷</span><span>History &amp; weight</span></a>
-      <a href="#alerts" class="nav-link" data-view="alerts"><span class="ico">!</span><span>Alerts</span><span class="nav-badge" id="badge-alerts" hidden>0</span></a>
+      <a href="#guide" class="nav-link" data-view="guide"><span class="ico">✎</span><span>Program guide</span></a>
       <a href="#chat" class="nav-link" data-view="chat"><span class="ico">✉</span><span>Message coach</span></a>
       <a href="#referral" class="nav-link" data-view="referral"><span class="ico">⇄</span><span>Refer &amp; earn</span></a>
       <a href="/client/tracker.html" class="nav-link" id="nav-tracker"><span class="ico">◔</span><span>Fasting Tracker</span><span class="nav-lock" id="nav-tracker-lock">🔒</span></a>
@@ -36,7 +36,12 @@
     <div class="topbar">
       <button class="hamburger" onclick="openSidebar()" aria-label="Open menu">☰</button>
       <h1 id="topbar-title">Today</h1>
-      <div id="user-chip" class="user-chip"></div>
+      <div class="topbar-right">
+        <button class="bell-btn" onclick="showView('alerts')" aria-label="Alerts">
+          🔔<span class="bell-badge" id="badge-alerts-bell" hidden>0</span>
+        </button>
+        <button id="user-chip" class="user-chip" onclick="openProfileModal()"></button>
+      </div>
     </div>
 
     <div class="content">
@@ -56,13 +61,23 @@
           <div class="fasting-panels">
             <div class="card fasting-panel">
               <div class="panel-label">Fasting window</div>
+              <div class="panel-times">
+                <span>Starts <b id="fast-starts">—</b></span>
+                <span>Ends <b id="fast-ends">—</b></span>
+              </div>
               <div class="panel-state" id="fast-state">—</div>
-              <div class="panel-countdown" id="fast-countdown">--:--:--</div>
+              <div class="panel-countdown" id="fast-countdown">00:00:00</div>
+              <div class="panel-timer-label" id="fast-timer-label">elapsed</div>
             </div>
             <div class="card fasting-panel">
               <div class="panel-label">Eating window</div>
+              <div class="panel-times">
+                <span>Starts <b id="eat-starts">—</b></span>
+                <span>Ends <b id="eat-ends">—</b></span>
+              </div>
               <div class="panel-state" id="eat-state">—</div>
-              <div class="panel-countdown" id="eat-countdown">--:--:--</div>
+              <div class="panel-countdown" id="eat-countdown">00:00:00</div>
+              <div class="panel-timer-label" id="eat-timer-label">elapsed</div>
             </div>
           </div>
           <div class="card" id="pause-card" style="margin-top:16px;">
@@ -137,6 +152,12 @@
         </div>
       </div>
 
+      <!-- PROGRAM GUIDE — day-by-day info your coach writes, read-only here -->
+      <div class="view" id="view-guide">
+        <div class="page-intro"><h2>Program guide</h2><p class="hint">What your coach has planned for each day.</p></div>
+        <div id="guide-list"><p class="hint">Loading…</p></div>
+      </div>
+
       <!-- ALERTS -->
       <div class="view" id="view-alerts"><div id="alerts-list"></div></div>
 
@@ -169,6 +190,14 @@
     <div class="field"><label>Label</label><input type="text" id="add-item-label"></div>
     <div class="error-text" id="add-item-error" style="display:none;"></div>
     <button class="btn btn-primary btn-sm" onclick="submitAddItem()">Add</button>
+  </div>
+</div>
+
+<!-- PROFILE popup -->
+<div class="modal-backdrop" id="profile-modal">
+  <div class="modal">
+    <div class="modal-head"><h3>Your profile</h3><button class="modal-close" onclick="closeModal('profile-modal')">×</button></div>
+    <div id="profile-modal-body"><p class="hint">Loading…</p></div>
   </div>
 </div>
 

@@ -170,7 +170,10 @@ const Regimen = sequelize.define('Regimen', {
     defaultValue: 'eating_window'
   },
   phase: { type: DataTypes.STRING },
-  focus: { type: DataTypes.STRING },
+  // TEXT, not STRING: this now doubles as the day-by-day "program guide"
+  // text the client reads, which runs longer than the original one-line
+  // "focus" note and would silently truncate as a VARCHAR(255).
+  focus: { type: DataTypes.TEXT },
   waterTargetMl: { type: DataTypes.INTEGER, defaultValue: 3000 }
 }, {
   indexes: [{ unique: true, fields: ['user_id', 'day'] }]
@@ -269,7 +272,11 @@ const Settings = sequelize.define('Settings', {
   upiId: { type: DataTypes.STRING, defaultValue: '' },
   address: { type: DataTypes.STRING, defaultValue: '' },
   supportHours: { type: DataTypes.STRING, defaultValue: '' },
-  note: { type: DataTypes.STRING, defaultValue: '' }
+  note: { type: DataTypes.STRING, defaultValue: '' },
+  // A reusable "default day" — window + meals + habits — the coach can
+  // save once from the Assign Plan modal and reload into any day for
+  // any client, instead of retyping the same meals every day.
+  defaultDayTemplate: { type: DataTypes.JSON, defaultValue: null }
 });
 Settings.getOrCreate = async function () {
   let doc = await Settings.findOne({ where: { singleton: 'main' } });

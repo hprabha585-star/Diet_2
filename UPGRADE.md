@@ -1,103 +1,87 @@
-# Upgrade notes — Fasting Tracker + fixes
+# Upgrade notes — Today page, profile, protocol guide, admin flexibility
 
-## Files in this drop
+## Deploy
+
+1. Back up the database.
+2. Upload all files (same paths as before).
+3. Run `npm run migrate` — the `focus` column on Regimen changed from
+   VARCHAR to TEXT (so day-info notes stop truncating), and Settings
+   gained a `defaultDayTemplate` JSON column. Both need `sync({ alter: true })`,
+   which `npm run migrate` already runs.
+4. Restart the app.
+
+No new tables, no data loss — just column changes on tables that exist.
+
+## What changed, and why
+
+**Today header** — replaced the static "Today" title with the actual
+date + weekday (e.g. "Saturday, 26 Sep"), computed in the browser so it's
+always the viewer's own local date.
+
+**Profile popup** — the name in the top-right is now a button. Clicking
+it opens a popup with name, age, height, current weight and BMI, pulled
+from a new `/api/client/profile-summary` endpoint (uses the *latest*
+logged weight for BMI — the old `/history` endpoint was quietly using the
+one-time starting weight instead, so BMI could look stale after logging a
+new weight; that's fixed too).
+
+**Alerts moved beside the profile** — it's now a bell icon with a badge
+in the topbar, next to the profile button, instead of a full sidebar
+entry. Clicking it still opens the same Alerts panel as before.
+
+**Fasting/eating windows** — each panel now shows the *exact* clock time
+the window starts and ends (e.g. "Starts 9:00 PM · Ends 1:00 PM"), and
+the big timer counts **up** (elapsed time) for whichever window is
+currently active, with the *other* panel showing a countdown to when it
+starts. Both are computed from the same numbers the server already sends
+(`startHour`/`endHour`), just read differently — no new API calls.
+
+**Weight progress** — each entry in History & weight now shows a small
+up/down badge comparing it to the entry logged before it, so day-to-day
+change is visible at a glance instead of just a bare list of numbers.
+
+**BMI save merged into the weight Save button** — clicking the plain
+"Save" under "Log today's weight" now also saves height/age/gender (if
+those fields are filled in below) and recalculates the BMI card
+automatically, in the same click. The BMI card's own "Calculate"/"Save
+this" still work independently if someone fills that card first.
+
+**Program guide** — a new client-facing page (sidebar: "Program guide")
+listing every day of the programme with whatever text the coach has
+written for it. On the admin side, roster -> "..." -> Program guide opens
+a lightweight, day-by-day textarea list — separate from the full Assign
+Plan modal — so the coach can write "day 12: cheat meal, keep water up"
+kind of notes without touching meals or the eating window. Each box saves
+on blur (click away), no separate Save button needed.
+
+**Default day template** — in Assign Plan, "Save this as my default day"
+stores the current window + meals + habits as a reusable template; "Load
+my default day" pulls it back into the form for any day, any client.
+This is what makes assigning a normal, repeat-of-yesterday day fast
+instead of retyping four meals every time.
+
+**Assign a range of days** — Assign Plan now has a "Days to allocate"
+field. Set day to 6 and days to 6, and the same window/meals/habits get
+written to days 6-11 in one Apply — for one client or, combined with
+"Apply to ALL active clients", the whole cohort at once. Assigning past
+the end of someone's programme length extends it automatically, same as
+the existing custom-day behaviour.
+
+## Files touched
 
 ```
-models/index.js                 UPDATED  new tracker tables, extra TrackerSession columns
-routes/tracker.js               NEW      the whole Fasting Tracker API  (/api/tracker/*)
-routes/admin.js                 UPDATED  assigned-day lookup, custom days, BMI in client detail
-routes/client.js                UPDATED  (from the previous drop) derived scoring
-server.js                       UPDATED  mounts /api/tracker
-utils/fastingContent.js         NEW      schedules, stages, education, tips, tasks, safety text
-utils/scoring.js                NEW      points/streak logic (previous drop)
-utils/rescoreAll.js             NEW      one-off backfill (previous drop)
-utils/migrate.js                UPDATED  now uses sync({ alter: true }) — see below
-public/client/tracker.html      NEW      the tracker section, with its own sub-pages
-public/js/tracker.js            NEW      tracker frontend
-public/css/tracker.css          NEW      tracker styles
-public/client/dashboard.html    UPDATED  BMI card, tracker link, dead tracker view removed
-public/js/client.js             UPDATED  BMI save fix, progress bar, dead tracker code removed
-public/admin/dashboard.html     UPDATED  assign-plan status strip, client detail modal
-public/js/admin.js              UPDATED  assign-plan prefill, custom days, client detail
-public/css/dashboard.css        UPDATED  admin additions + polish pass
+models/index.js                 Regimen.focus -> TEXT, Settings.defaultDayTemplate (JSON)
+routes/admin.js                 default-day-template, program-guide, focus quick-edit,
+                                 range assignment (day + days) on assign-plan & apply-all
+routes/client.js                profile-summary, program-guide, /history BMI fix
+public/js/api.js                fmtHour12() helper
+public/js/client.js             showView/topbar rewrite, tick() rewrite, profile modal,
+                                 program guide, weight deltas, weight+BMI save merge
+public/js/admin.js              range assignment, default-day save/load, program guide editor
+public/client/dashboard.html    topbar, fasting panels, profile modal, program guide view
+public/admin/dashboard.html     range field, default-day buttons, program guide modal
+public/css/dashboard.css        styles for all of the above
 ```
 
-No new npm dependencies.
-
-## Deploy steps
-
-1. Upload the files over the existing ones (same paths).
-2. **Back up the database**, then run once from Hostinger's Node terminal:
-   ```bash
-   npm run migrate        # now sync({ alter: true }) — see the warning below
-   node utils/rescoreAll.js
-   ```
-3. Restart the app from hPanel.
-
-### Why migrate changed
-
-`sequelize.sync()` only creates tables that are **missing**. It will never
-add a column to a table that already exists — so the new `scheduleKey`,
-`eatingStartedAt`, `localDate` and other columns on `TrackerSessions`
-would silently not appear, and the tracker would fail at runtime.
-`npm run migrate` now runs `sync({ alter: true })`, which compares each
-model to the live table and adds what's missing.
-
-`alter: true` can drop or retype a column if a model and a table disagree.
-Take a phpMyAdmin export first. The boot-time `sequelize.sync()` in
-`server.js` is deliberately left as plain sync — alter on every restart is
-not something you want in production.
-
-## What's in the tracker
-
-Separate pages inside `/client/tracker.html`: Today, Current fast,
-Schedule, History, Statistics, Calendar, Meals & macros, Water, Fasting
-stages, Education, Daily tasks, Settings.
-
-Covers: schedule selection (12:12 → 23:1 and custom) with calculated end
-times, start-fast confirmation with editable start time, single-active-fast
-enforcement, live ring timer with stage, progress percentages, end-fast
-confirmation recording completed vs ended-early, eating-window countdown,
-history, statistics across week/month/all-time, weekly bar chart, calendar
-with per-day detail, streaks that rest days don't break, daily goal,
-nutrition goals and macro bars, meal logging with quick-add buttons, water
-tracking with ml/oz/L units and history, rest days, weekly flexible
-schedule, education articles, rotating dismissible tips, daily tasks,
-empty states, and safety information.
-
-## Two things the spec asks for that this cannot fully do
-
-**Reminders.** Section 21 and 22 reminders are implemented as settings plus
-in-app notifications that fire while FastCoach is open in a browser tab
-(using the browser Notification API where the user grants permission).
-Waking a closed phone needs Web Push: a service worker, VAPID keys, and a
-background job on the server to send at the scheduled time. Hostinger's
-Node app can host that, but it's a separate piece of work and I'd rather
-flag it than pretend the current build does it.
-
-**Nutrition database.** Meals are logged with the numbers the client types
-in. There is no food database behind it — section 16 says not to use fake
-calorie values, so nothing is auto-filled. Wiring in a food API later would
-slot into `POST /api/tracker/meals` without changing the UI.
-
-## Fixes in this drop
-
-- **BMI "Save this" did nothing visible.** Two causes: `loadHistoryPage()`
-  blanked the result panel immediately after saving, and the stored session
-  user was never refreshed, so height/age looked unsaved on return. Both
-  fixed; the confirmation now says what was saved, and errors surface
-  instead of failing silently.
-- **Coach couldn't see BMI.** The roster "⋯" menu has a new
-  **View details & BMI** entry showing height, age, gender, current weight,
-  change since start, BMI with its band, healthy weight range, recent
-  weight log and assigned days.
-- **Assign plan opened blank.** It now loads the client's actual saved
-  regimen for the selected day — window, meals and habits — and says
-  "Currently assigned, last saved <time>". A strip of chips shows every day
-  already assigned; clicking one jumps to it. The 55-day default is only
-  used when a day has nothing assigned, and there's a button to pull the
-  default in deliberately.
-- **Custom days.** The day field accepts any number ≥ 1. Assigning a day
-  past the client's programme length extends `challengeLengthDays`
-  automatically, for that client or for the whole cohort on apply-all.
-  Days with no 55-day reference are labelled as custom and start blank.
+Nothing in the Fasting Tracker (tracker.html / tracker.js) or the coach's
+payments/leaderboard/chat panels was touched.

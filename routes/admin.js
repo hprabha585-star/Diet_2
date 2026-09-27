@@ -205,6 +205,80 @@ router.get('/clients/:id/assigned-days', async (req, res) => {
   });
 });
 
+// GET /api/admin/default-day-template — the coach's saved "default day":
+// a reusable window + meal/habit set, so a normal day doesn't have to be
+// retyped from scratch every single time.
+router.get('/default-day-template', async (req, res) => {
+  const settings = await Settings.getOrCreate();
+  res.json({ template: settings.defaultDayTemplate || null });
+});
+
+// PUT /api/admin/default-day-template — save the current Assign Plan form
+// (window + meals + habits, NOT the day number) as the standing default.
+router.put('/default-day-template', async (req, res) => {
+  try {
+    const settings = await Settings.getOrCreate();
+    const { startHour, endHour, isFullDayFast, focus, waterTargetMl, meals, milestones } = req.body;
+    settings.defaultDayTemplate = {
+      startHour, endHour, isFullDayFast: !!isFullDayFast, focus: focus || '',
+      waterTargetMl: waterTargetMl || 3000,
+      meals: Array.isArray(meals) ? meals : [],
+      milestones: Array.isArray(milestones) ? milestones : [],
+      savedAt: new Date().toISOString()
+    };
+    await settings.save();
+    res.json({ template: settings.defaultDayTemplate });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not save default day', detail: err.message });
+  }
+});
+
+// GET /api/admin/clients/:id/program-guide — every day from 1 to the
+// client's challenge length, with whatever focus text/phase is on record
+// (or null for a day nothing has been written for yet). This is the
+// day-by-day guide the coach edits and the client reads — separate from
+// full meal assignment, for quick day-info touch-ups.
+router.get('/clients/:id/program-guide', async (req, res) => {
+  const client = await User.findOne({ where: { id: req.params.id, role: 'client' } });
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  const regimens = await Regimen.findAll({
+    where: { userId: client.id }, order: [['day', 'ASC']],
+    attributes: ['day', 'phase', 'focus', 'protocolType', 'updatedAt']
+  });
+  const byDay = new Map(regimens.map(r => [r.day, r]));
+  const days = [];
+  for (let d = 1; d <= client.challengeLengthDays; d++) {
+    const r = byDay.get(d);
+    days.push({ day: d, phase: r ? r.phase : '', focus: r ? r.focus : '', assigned: !!r });
+  }
+  res.json({ days, currentDay: client.currentChallengeDay() });
+});
+
+// PATCH /api/admin/clients/:id/regimen/:day/focus — quick edit of just the
+// day-info text, without touching that day's meals/habits/window. Creates
+// the day (with sane window defaults) if it doesn't exist yet, so the
+// coach can write the story of the programme ahead of assigning meals.
+router.patch('/clients/:id/regimen/:day/focus', async (req, res) => {
+  try {
+    const client = await User.findOne({ where: { id: req.params.id, role: 'client' } });
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+    const day = parseInt(req.params.day, 10);
+    if (!day || day < 1) return res.status(400).json({ error: 'day must be 1 or higher' });
+    if (day > client.challengeLengthDays) { client.challengeLengthDays = day; await client.save(); }
+
+    const [regimen] = await Regimen.findOrCreate({
+      where: { userId: client.id, day },
+      defaults: { userId: client.id, day, startHour: 9, endHour: 17 }
+    });
+    regimen.focus = typeof req.body.focus === 'string' ? req.body.focus : regimen.focus;
+    if (typeof req.body.phase === 'string') regimen.phase = req.body.phase;
+    await regimen.save();
+    res.json({ day: regimen.day, focus: regimen.focus, phase: regimen.phase });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not save day info', detail: err.message });
+  }
+});
+
 // PATCH /api/admin/clients/:id — coach-editable client facts, including
 // the challenge length (needed when assigning a day past the 55th).
 router.patch('/clients/:id', async (req, res) => {
@@ -250,39 +324,55 @@ async function writeRegimen(userId, payload) {
 }
 
 // POST /api/admin/clients/:id/assign-plan
+// Body.days (optional, default 1): when >1, the SAME window/meals/habits
+// are written to every day from `day` through `day + days - 1`. This is
+// what makes "assign 6 days starting from day 6" a single action instead
+// of six trips through the modal.
 router.post('/clients/:id/assign-plan', async (req, res) => {
   try {
     const client = await User.findOne({ where: { id: req.params.id, role: 'client' } });
     if (!client) return res.status(404).json({ error: 'Client not found' });
     if (client.planMode !== 'protocol') return res.status(400).json({ error: 'This client is on the Fasting Tracker plan and has no coach-assigned regimen.' });
-    const day = parseInt(req.body.day, 10);
-    if (!day || day < 1) return res.status(400).json({ error: 'day must be 1 or higher' });
+    const startDay = parseInt(req.body.day, 10);
+    if (!startDay || startDay < 1) return res.status(400).json({ error: 'day must be 1 or higher' });
+    const span = Math.max(1, Math.min(90, parseInt(req.body.days, 10) || 1));
+    const endDay = startDay + span - 1;
 
-    // Custom days: assigning past the end of the challenge simply extends
-    // it, so the coach is never boxed in by the original 55.
-    if (day > client.challengeLengthDays) {
-      client.challengeLengthDays = day;
+    // Custom/range days: assigning past the end of the challenge simply
+    // extends it, so the coach is never boxed in by the original 55.
+    if (endDay > client.challengeLengthDays) {
+      client.challengeLengthDays = endDay;
       await client.save();
     }
 
-    const regimen = await writeRegimen(client.id, { ...req.body, day });
-    res.json({ regimen, challengeLengthDays: client.challengeLengthDays });
+    let regimen = null;
+    const days = [];
+    for (let day = startDay; day <= endDay; day++) {
+      regimen = await writeRegimen(client.id, { ...req.body, day });
+      days.push(day);
+    }
+    res.json({ regimen, days, challengeLengthDays: client.challengeLengthDays });
   } catch (err) {
     res.status(500).json({ error: 'Could not assign plan', detail: err.message });
   }
 });
 
-// POST /api/admin/assign-plan/apply-all  — push the same day to every active protocol client
+// POST /api/admin/assign-plan/apply-all — push the same day (or day range)
+// to every active protocol client at once.
 router.post('/assign-plan/apply-all', async (req, res) => {
   try {
-    const day = parseInt(req.body.day, 10);
-    if (!day || day < 1) return res.status(400).json({ error: 'day must be 1 or higher' });
+    const startDay = parseInt(req.body.day, 10);
+    if (!startDay || startDay < 1) return res.status(400).json({ error: 'day must be 1 or higher' });
+    const span = Math.max(1, Math.min(90, parseInt(req.body.days, 10) || 1));
+    const endDay = startDay + span - 1;
     const clients = await User.findAll({ where: { role: 'client', planMode: 'protocol', status: 'active' } });
     for (const c of clients) {
-      if (day > c.challengeLengthDays) { c.challengeLengthDays = day; await c.save(); }
-      await writeRegimen(c.id, { ...req.body, day });
+      if (endDay > c.challengeLengthDays) { c.challengeLengthDays = endDay; await c.save(); }
+      for (let day = startDay; day <= endDay; day++) {
+        await writeRegimen(c.id, { ...req.body, day });
+      }
     }
-    res.json({ applied: clients.length });
+    res.json({ applied: clients.length, days: endDay - startDay + 1 });
   } catch (err) {
     res.status(500).json({ error: 'Could not apply plan to cohort', detail: err.message });
   }
