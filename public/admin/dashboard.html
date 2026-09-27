@@ -165,6 +165,7 @@
     <div class="modal-head"><h3>Assign plan — <span id="assign-client-name"></span></h3><button class="modal-close" onclick="closeModal('assign-plan-modal')">×</button></div>
     <input type="hidden" id="assign-client-id">
     <div class="assigned-days-strip" id="assigned-days-strip"></div>
+    <div class="move-day-row" id="move-day-row"></div>
     <div class="day-defaults-row">
       <label class="hint" style="white-space:nowrap;">Day</label>
       <input type="number" id="assign-day" min="1" style="width:90px;" onchange="fillDayDefaults()">
@@ -250,7 +251,12 @@
       <h3>Program guide — <span id="guide-client-name"></span></h3>
       <button class="modal-close" onclick="closeModal('program-guide-modal')">×</button>
     </div>
+    <input type="hidden" id="guide-client-id">
     <p class="hint">Short day-by-day notes the client sees on their Program guide page. Saves per day as you leave the box.</p>
+    <div class="default-day-row" style="align-items:center;">
+      <button class="btn-outline btn-sm" onclick="seedProgramGuide(document.getElementById('guide-client-id').value)">📋 Fill from 55-day protocol</button>
+      <label class="check-line" style="margin:0;"><input type="checkbox" id="guide-seed-overwrite"> Overwrite days I've already written</label>
+    </div>
     <div id="program-guide-editor" style="margin-top:10px;max-height:60vh;overflow-y:auto;"><p class="hint">Loading…</p></div>
   </div>
 </div>

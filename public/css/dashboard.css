@@ -704,6 +704,9 @@
 .delta.down { color: var(--success); }
 .delta.flat { color: #6B6F63; font-weight: 500; }
 
+.share-link-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.share-link-row input { flex: 1; min-width: 200px; background: var(--paper); }
+
 /* ============================================================
    Program guide (client) + Assign-plan range & default-day (admin)
    ============================================================ */
@@ -736,3 +739,17 @@
 
 /* Days-to-allocate live preview — impossible to miss when it's not 1 */
 .range-warning { color: #8F5720; font-weight: 600; }
+
+/* Move-client's-day control, inside Assign Plan */
+.move-day-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 12px; background: rgba(184,117,46,0.06); border: 1px solid var(--ember-dim);
+  border-radius: var(--radius-sm); margin-bottom: 14px;
+}
+.move-day-row input {
+  padding: 7px 9px; border: 1px solid var(--line); border-radius: var(--radius-sm); font-size: 13.5px;
+}
+
+/* Simple labeled checkbox row, reused in a couple of admin modals */
+.check-line { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
+.check-line input { width: 16px; height: 16px; accent-color: var(--ember); }

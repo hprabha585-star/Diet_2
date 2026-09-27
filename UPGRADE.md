@@ -137,3 +137,45 @@ menu) but that's easy to miss. It's now also a full sidebar item:
 open their day-by-day editor directly, no dropdown-hunting required.
 
 Same deploy steps as before: back up, upload, `npm run migrate`, restart.
+
+## Update — 2026-09-27 (evening)
+
+**No schema changes this time** — no `npm run migrate` needed, just
+upload and restart.
+
+**1. Referral link, not just a code.** Refer & earn now shows a full
+link (`yourdomain.com/index.html?ref=CODE`) with Copy and, on devices
+that support it, a native Share button. The landing page reads `?ref=`
+from the URL, pre-fills it into the referral field, and jumps straight
+to Create account — so whoever clicks the link doesn't have to find or
+type the code themselves.
+
+**2. 55-day protocol document loaded into Program Guide.** The uploaded
+`55-Day_Step-by-Step_Fasting_Protocol.docx` turned out to be phase-level
+goals for the six phases (matches what was already transcribed into
+`utils/protocolDefaults.js` as day-by-day data) plus the same safety
+notes already in the app — so rather than duplicate content, its phase
+goals were added there (`PHASE_GOALS`) and combined with each day's
+existing focus text. In the Program guide editor (roster -> "..." ->
+Program guide, or the new sidebar Program guide page), there's now a
+**"Fill from 55-day protocol"** button: it writes that combined text into
+every day that doesn't have anything written yet, leaving anything the
+coach has already customized alone — a checkbox lets you overwrite
+everything instead if you want a clean reset. Meals, habits and the
+eating window for already-assigned days are never touched by this, only
+the guide text.
+
+**3. Move a client's current day directly.** Assign Plan now shows
+"Client is currently on day X of Y" with its own "Move client to this
+day" control, separate from the Day field used to edit a day's plan
+content. Moving a client from day 7 to day 10 no longer means editing
+what day 7's plan says — it changes what their Today page shows,
+immediately, without touching any assigned plan. (Under the hood this
+recalculates `challengeStartDate` backwards from the requested day, in
+the coach's own local date — so it isn't at the mercy of server
+timezone, same reasoning as the fasting-window date logic elsewhere.)
+
+Files touched: `utils/protocolDefaults.js` (PHASE_GOALS, guideTextFor),
+`routes/admin.js` (set-day, program-guide/seed-defaults), `public/js/admin.js`,
+`public/admin/dashboard.html`, `public/js/client.js`, `public/index.html`,
+`public/css/dashboard.css`.

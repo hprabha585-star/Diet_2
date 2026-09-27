@@ -233,14 +233,51 @@ async function loadAssignedDays(clientId) {
     const data = await apiRequest(`/admin/clients/${clientId}/assigned-days`);
     assignedDaysCache = data.days || [];
     const el = document.getElementById('assigned-days-strip');
-    if (!el) return;
-    el.innerHTML = assignedDaysCache.length
-      ? `<span class="hint">Already assigned:</span>` + assignedDaysCache.map(d =>
-          `<button class="day-chip ${d.day === data.currentDay ? 'current' : ''}"
-                   title="${esc(d.focus || '')}"
-                   onclick="jumpToDay(${d.day})">${d.day}</button>`).join('')
-      : '<span class="hint">No days assigned to this client yet.</span>';
+    if (el) {
+      el.innerHTML = assignedDaysCache.length
+        ? `<span class="hint">Already assigned:</span>` + assignedDaysCache.map(d =>
+            `<button class="day-chip ${d.day === data.currentDay ? 'current' : ''}"
+                     title="${esc(d.focus || '')}"
+                     onclick="jumpToDay(${d.day})">${d.day}</button>`).join('')
+        : '<span class="hint">No days assigned to this client yet.</span>';
+    }
+
+    // The client's ACTUAL current day (what their Today page shows) is a
+    // different thing from which day's plan you're editing in the form
+    // below — this control changes that, independent of assigning content.
+    const moveEl = document.getElementById('move-day-row');
+    if (moveEl) {
+      moveEl.innerHTML = `
+        <span class="hint">Client is currently on <b>day ${data.currentDay || 0} of ${data.challengeLengthDays}</b>.</span>
+        <input type="number" id="move-day-input" min="1" style="width:80px;" placeholder="Day">
+        <button class="btn-outline btn-sm" onclick="moveClientToDay(${clientId})">Move client to this day</button>
+      `;
+    }
   } catch (err) { /* non-fatal */ }
+}
+
+async function moveClientToDay(clientId) {
+  const input = document.getElementById('move-day-input');
+  const day = parseInt(input.value, 10);
+  if (!day || day < 1) return alert('Enter a day number of 1 or higher.');
+  if (!confirm(`Move this client from their current day to day ${day}? This changes what their Today page shows right away — it does not touch any assigned plans.`)) return;
+  try {
+    await apiRequest(`/admin/clients/${clientId}/set-day`, {
+      method: 'POST',
+      body: { day, today: todayLocalDate() }
+    });
+    input.value = '';
+    await loadAssignedDays(clientId);
+    await loadRoster();
+    alert(`Client moved to day ${day}.`);
+  } catch (err) { alert(err.message); }
+}
+
+// The admin's own local calendar date — never derived from server time,
+// same reasoning as everywhere else timezone-sensitive in this app.
+function todayLocalDate() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function jumpToDay(day) {
@@ -521,7 +558,13 @@ async function loadDefaultDayIntoForm() {
 /* ------------------------------------------------------------------ */
 async function openProgramGuideModal(clientId, name) {
   document.getElementById('guide-client-name').textContent = name;
+  document.getElementById('guide-client-id').value = clientId;
+  document.getElementById('guide-seed-overwrite').checked = false;
   openModal('program-guide-modal');
+  loadProgramGuideEditor(clientId);
+}
+
+async function loadProgramGuideEditor(clientId) {
   const el = document.getElementById('program-guide-editor');
   el.innerHTML = '<p class="hint">Loading…</p>';
   try {
@@ -535,6 +578,24 @@ async function openProgramGuideModal(clientId, name) {
   } catch (err) {
     el.innerHTML = `<p class="error-text">${esc(err.message)}</p>`;
   }
+}
+
+// Fills every day's guide text from the coach's 55-day protocol document
+// (utils/protocolDefaults.js). By default only days with nothing written
+// yet get filled — an already-customized day is left alone unless the
+// coach explicitly asks to overwrite.
+async function seedProgramGuide(clientId) {
+  const overwrite = document.getElementById('guide-seed-overwrite').checked;
+  if (overwrite && !confirm('This replaces the text on EVERY day (1–55) with the 55-day protocol wording, including days you\'ve already written something custom for. Continue?')) return;
+  try {
+    const res = await apiRequest(`/admin/clients/${clientId}/program-guide/seed-defaults`, {
+      method: 'POST', body: { overwrite }
+    });
+    await loadProgramGuideEditor(clientId);
+    alert(overwrite
+      ? `Filled all ${res.total} days from the 55-day protocol.`
+      : `Filled ${res.seeded - res.skipped} empty day(s) from the 55-day protocol — ${res.skipped} day(s) with existing text were left as-is.`);
+  } catch (err) { alert(err.message); }
 }
 
 async function saveDayFocus(clientId, day, focus) {

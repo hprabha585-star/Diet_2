@@ -9,7 +9,7 @@ const {
 } = require('../models');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { generateReferralCode } = require('../utils/helpers');
-const { PROTOCOL_DAYS, SAFETY_NOTES } = require('../utils/protocolDefaults');
+const { PROTOCOL_DAYS, SAFETY_NOTES, guideTextFor } = require('../utils/protocolDefaults');
 const { MEAL_PRESETS } = require('../utils/mealPresets');
 
 const router = express.Router();
@@ -293,6 +293,86 @@ router.patch('/clients/:id', async (req, res) => {
     res.json({ client: client.toSafeJSON() });
   } catch (err) {
     res.status(500).json({ error: 'Could not update client', detail: err.message });
+  }
+});
+
+// Local calendar date, never toISOString() — east of UTC, toISOString()
+// on a local midnight rolls back a day, which would move a client's day
+// count by one for anyone in, say, IST.
+function isoDate(d) {
+  const x = new Date(d);
+  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+}
+
+// POST /api/admin/clients/:id/set-day — move a client's CURRENT day
+// directly (e.g. day 7 -> day 10), independent of assigning any day's
+// plan. Works backwards from challengeStartDate so currentChallengeDay()
+// returns exactly the requested day as of "today" (the coach's own local
+// date, sent from the browser so this isn't at the mercy of server
+// timezone). Existing paused-days credit is preserved.
+router.post('/clients/:id/set-day', async (req, res) => {
+  try {
+    const client = await User.findOne({ where: { id: req.params.id, role: 'client' } });
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+    if (client.planMode !== 'protocol') return res.status(400).json({ error: 'This client is on the Fasting Tracker plan, which has no day count.' });
+
+    const day = parseInt(req.body.day, 10);
+    if (!day || day < 1) return res.status(400).json({ error: 'day must be 1 or higher' });
+    if (day > client.challengeLengthDays) client.challengeLengthDays = day;
+
+    const today = new Date((req.body.today || isoDate(new Date())) + 'T00:00:00');
+    const offsetDays = (day - 1) + (client.pausedDays || 0);
+    today.setDate(today.getDate() - offsetDays);
+    client.challengeStartDate = isoDate(today);
+    await client.save();
+
+    res.json({ client: client.toSafeJSON(), day: client.currentChallengeDay() });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not change the client\'s day', detail: err.message });
+  }
+});
+
+// POST /api/admin/clients/:id/program-guide/seed-defaults — fills the
+// Program Guide's day-info text from the coach's 55-day protocol
+// document (utils/protocolDefaults.js), so a fresh guide isn't a wall of
+// "Not written yet." By default only touches days that have no text of
+// their own yet; overwrite:true replaces everything. Never touches a
+// day's window/meals/habits — focus (and phase label) only. A day that
+// doesn't exist yet is created with the protocol's own window as a
+// starting point; an existing day's window/meals are left exactly as
+// the coach set them.
+router.post('/clients/:id/program-guide/seed-defaults', async (req, res) => {
+  try {
+    const client = await User.findOne({ where: { id: req.params.id, role: 'client' } });
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+    if (client.planMode !== 'protocol') return res.status(400).json({ error: 'This client is on the Fasting Tracker plan and has no Program Guide.' });
+
+    const overwrite = !!req.body.overwrite;
+    const maxDay = Math.max(client.challengeLengthDays, PROTOCOL_DAYS[PROTOCOL_DAYS.length - 1].day);
+    if (maxDay > client.challengeLengthDays) { client.challengeLengthDays = maxDay; await client.save(); }
+
+    let seeded = 0, skipped = 0;
+    for (const d of PROTOCOL_DAYS) {
+      const [regimen, created] = await Regimen.findOrCreate({
+        where: { userId: client.id, day: d.day },
+        defaults: {
+          userId: client.id, day: d.day, phase: d.phase,
+          startHour: d.startHour, endHour: d.endHour, isFullDayFast: d.isFullDayFast,
+          protocolType: d.protocolType, waterTargetMl: d.waterTargetMl,
+          focus: guideTextFor(d.day)
+        }
+      });
+      if (!created) {
+        if (!overwrite && regimen.focus && regimen.focus.trim()) { skipped++; continue; }
+        regimen.focus = guideTextFor(d.day);
+        if (!regimen.phase) regimen.phase = d.phase;
+        await regimen.save();
+      }
+      seeded++;
+    }
+    res.json({ seeded, skipped, total: PROTOCOL_DAYS.length });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not seed the program guide', detail: err.message });
   }
 });
 

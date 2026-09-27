@@ -293,6 +293,17 @@ async function loadPlans() {
 loadPlans();
 setRole('client');
 
+// A referral link (?ref=CODE) pre-fills the code and jumps straight to
+// the Create account tab, so whoever clicks it doesn't have to find the
+// referral field or type anything in by hand.
+(function prefillReferral() {
+  const ref = new URLSearchParams(location.search).get('ref');
+  if (!ref) return;
+  document.getElementById('reg-referral').value = ref;
+  setTab('register');
+  document.getElementById('access')?.scrollIntoView({ behavior: 'smooth' });
+})();
+
 // Hero ring ticks purely for visual flavor using local time against a
 // generic 16/8 window — the real countdown lives on the dashboards.
 function tickHeroRing() {

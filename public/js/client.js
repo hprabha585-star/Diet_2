@@ -747,17 +747,47 @@ async function sendMessage() {
 async function loadReferral() {
   try {
     const data = await apiRequest('/client/referral');
+    // The link that carries the code automatically — the registration
+    // page reads ?ref=... and pre-fills it, so whoever clicks doesn't
+    // have to type the code in by hand.
+    const link = `${location.origin}/index.html?ref=${encodeURIComponent(data.referralCode)}`;
     document.getElementById('referral-card').innerHTML = `
       <h3>Your code: ${esc(data.referralCode)}</h3>
       <div class="stat-grid two" style="margin-top:16px;">
         <div class="card stat-card"><div class="val">₹${data.walletBalanceInr}</div><div class="lbl">Wallet balance</div></div>
         <div class="card stat-card"><div class="val">${data.referredCount}</div><div class="lbl">People referred</div></div>
       </div>
-      <div class="field" style="margin-top:20px;max-width:220px;"><label>Request payout (₹)</label><input type="number" id="payout-amount"></div>
+      <div class="field" style="margin-top:20px;"><label>Your referral link</label>
+        <div class="share-link-row">
+          <input type="text" id="referral-link-input" value="${esc(link)}" readonly onclick="this.select()">
+          <button class="btn btn-outline btn-sm" onclick="copyReferralLink()">Copy</button>
+          <button class="btn btn-primary btn-sm" id="share-referral-btn" onclick="shareReferralLink()" hidden>Share</button>
+        </div>
+        <div class="hint" id="referral-copy-confirm" style="display:none;">Copied.</div>
+      </div>
+      <div class="field" style="margin-top:16px;max-width:220px;"><label>Request payout (₹)</label><input type="number" id="payout-amount"></div>
       <div class="field" style="max-width:280px;"><label>UPI ID</label><input type="text" id="payout-upi"></div>
       <button class="btn btn-primary btn-sm" onclick="requestPayout()">Request payout</button>`;
+    // Only browsers/devices with a native share sheet get the Share
+    // button — everyone else still has Copy, which always works.
+    if (navigator.share) document.getElementById('share-referral-btn').hidden = false;
   } catch (err) { /* not active yet */ }
 }
+
+function copyReferralLink() {
+  const input = document.getElementById('referral-link-input');
+  input.select();
+  navigator.clipboard?.writeText(input.value).catch(() => document.execCommand('copy'));
+  const confirmEl = document.getElementById('referral-copy-confirm');
+  confirmEl.style.display = 'block';
+  setTimeout(() => { confirmEl.style.display = 'none'; }, 2000);
+}
+
+function shareReferralLink() {
+  const link = document.getElementById('referral-link-input').value;
+  navigator.share({ title: 'FastCoach', text: 'Join me on FastCoach — coach-led fasting cohorts.', url: link }).catch(() => {});
+}
+
 async function requestPayout() {
   try {
     const amountInr = parseInt(document.getElementById('payout-amount').value, 10);

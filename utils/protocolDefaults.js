@@ -116,4 +116,29 @@ const SAFETY_NOTES = [
   'Coach override: any day\'s window can be adjusted from the admin panel if a client has extreme fatigue, illness or travel conflicts.'
 ];
 
-module.exports = { PROTOCOL_DAYS, SAFETY_NOTES };
+// Per-phase goal, transcribed verbatim from the coach's
+// "55-Day Step-by-Step Fasting Protocol" document — used to give each
+// day's Program Guide entry a bit of phase-level context alongside its
+// own day-specific focus line.
+const PHASE_GOALS = {
+  [P1]: 'Establish routine baseline, control hunger spikes, and transition into a structured 14-hour fasting schedule.',
+  [P2]: 'Accelerate fat adaptation, lower resting insulin levels, and achieve a steady 18/6 fasting ratio.',
+  [P3]: 'Master 20/4 and 21/3 windows to prepare the body for full 24-hour extended fasts.',
+  [P4]: 'Trigger deep cellular autophagy with alternate 24-hour fasts and structured 18/6 refeed days.',
+  [P5]: 'Maximize metabolic repair, fat loss, and peak discipline through 36-hour and 48-hour extended fasting protocols.',
+  [P6]: 'Consolidate metabolic gains, stabilize hormone levels, and exit into a sustainable 16/8 lifestyle routine.'
+};
+
+/**
+ * The text used to seed a day's Program Guide entry: the day's own focus
+ * line, with its phase goal underneath for context the first time a
+ * coach opens a day they haven't written anything for yet.
+ */
+function guideTextFor(day) {
+  const d = PROTOCOL_DAYS.find(x => x.day === day);
+  if (!d) return '';
+  const goal = PHASE_GOALS[d.phase];
+  return goal ? `${d.focus}\n\n${d.phase} goal: ${goal}` : d.focus;
+}
+
+module.exports = { PROTOCOL_DAYS, SAFETY_NOTES, PHASE_GOALS, guideTextFor };
