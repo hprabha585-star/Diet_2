@@ -179,3 +179,26 @@ Files touched: `utils/protocolDefaults.js` (PHASE_GOALS, guideTextFor),
 `routes/admin.js` (set-day, program-guide/seed-defaults), `public/js/admin.js`,
 `public/admin/dashboard.html`, `public/js/client.js`, `public/index.html`,
 `public/css/dashboard.css`.
+
+## Update — 2026-09-28
+
+**No schema changes, no migrate needed.** Upload and restart.
+
+**Second admin account, with phpMyAdmin approval.** The login page's
+Coach/Admin panel had exactly one path — "First time? Create admin
+account" — which is correct for the *first* admin, but self-disables the
+moment one exists (as it should). The backend already had a second
+route, `POST /api/auth/request-admin`, built for this exact case (create
+a `pending_approval` account you then flip to `active` in phpMyAdmin),
+but it was never connected to any button — the README described it, the
+code just didn't have it wired up.
+
+Fixed: a second link — "Need another admin account? Request one" — now
+sits under the first one whenever Coach/Admin is selected, opens its own
+modal, and on success tells you exactly what to do next (hPanel →
+Databases → phpMyAdmin → Users table → change that row's `status` from
+`pending_approval` to `active`), so the person submitting the request
+doesn't need to go find the README to know what happens next.
+
+Files touched: `public/index.html`, `README.md` (updated to describe
+both paths accurately). Nothing else.

@@ -107,10 +107,14 @@ npm run dev                # http://localhost:5000 — serves API + frontend tog
 
 ## 4. First login
 
-- **Coach/Admin**: either run `npm run seed:admin` (uses `ADMIN_NAME`/
-  `ADMIN_EMAIL`/`ADMIN_PASSWORD` from `.env`) if you have terminal
-  access — **or**, from the login page, click
-  **Coach / Admin → "Need a coach/admin account? Request one"**. That
+- **Coach/Admin**: run `npm run seed:admin` (uses `ADMIN_NAME`/
+  `ADMIN_EMAIL`/`ADMIN_PASSWORD` from `.env`) for the very first account
+  if you have terminal access — or, on a fresh install with no admin yet,
+  click **Coach / Admin → "First time? Create admin account"** on the
+  login page, which activates immediately (works once only).
+
+  For a **second or later** admin/coach account, click
+  **Coach / Admin → "Need another admin account? Request one"**. That
   submits name/email/password through the app (so the password is
   correctly bcrypt-hashed), but the account is created with
   `status = 'pending_approval'` and **cannot log in yet**. To activate
@@ -120,9 +124,9 @@ npm run dev                # http://localhost:5000 — serves API + frontend tog
   - run: `UPDATE Users SET status='active' WHERE email='their@email.com';`
 
   Never insert a new admin row directly — always let the app create the
-  row (via seed or the request form) so the password is a real bcrypt
-  hash; you're only ever editing the `status` of a row the app already
-  created correctly.
+  row (via seed, first-time create, or the request form) so the password
+  is a real bcrypt hash; you're only ever editing the `status` of a row
+  the app already created correctly.
 - **Clients**: sign up from the landing page, choose a plan (coached or
   Fasting Tracker), submit their UPI UTR, and wait for coach approval —
   Admin console → Payment approvals.

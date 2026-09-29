@@ -98,6 +98,9 @@
         <p id="request-admin-link" style="display:none;text-align:center;margin-top:14px;">
           <a href="#" onclick="openFirstAdminModal(event)">First time? Create admin account</a>
         </p>
+        <p id="request-admin-link-2" style="display:none;text-align:center;margin-top:8px;">
+          <a href="#" onclick="openRequestAdminModal(event)">Need another admin account? Request one</a>
+        </p>
       </div>
 
       <div class="auth-panel" id="panel-register">
@@ -159,6 +162,34 @@
   </div>
 </div>
 
+<!-- Request an ADDITIONAL admin account, once the one-shot bootstrap
+     above has already been used. This creates the row with status
+     'pending_approval' — it cannot sign in until an existing admin
+     flips its status to 'active' from phpMyAdmin (Databases -> phpMyAdmin
+     -> Users table -> edit that row), same as the very first admin
+     could originally be approved. -->
+<div class="modal-backdrop" id="request-admin-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Request admin account</h3>
+      <button class="modal-close" onclick="closeModal('request-admin-modal')">×</button>
+    </div>
+    <p class="hint">For a second coach or staff account. This submits the request — an existing admin still has to approve it in phpMyAdmin before it can sign in.</p>
+    <div class="field" style="margin-top:14px;"><label>Name</label><input type="text" id="ra-name"></div>
+    <div class="field"><label>Email</label><input type="email" id="ra-email"></div>
+    <div class="field">
+      <label>Password</label>
+      <div class="pw-wrap">
+        <input type="password" id="ra-password" minlength="6">
+        <button type="button" class="pw-toggle" onclick="togglePw('ra-password', this)">Show</button>
+      </div>
+    </div>
+    <div class="error-text" id="ra-error" style="display:none;"></div>
+    <div class="success-text" id="ra-success" style="display:none;"></div>
+    <button class="btn btn-primary btn-sm" id="ra-submit-btn" onclick="submitRequestAdmin()" style="width:100%;">Submit request</button>
+  </div>
+</div>
+
 <style>
 .modal-backdrop {
   position: fixed; inset: 0; background: rgba(22,33,29,0.5); display: none;
@@ -181,6 +212,7 @@ function setRole(r) {
   document.getElementById('panel-register').style.display = r === 'admin' ? 'none' : '';
   document.querySelector('.tab-bar').style.display = r === 'admin' ? 'none' : '';
   document.getElementById('request-admin-link').style.display = r === 'admin' ? 'block' : 'none';
+  document.getElementById('request-admin-link-2').style.display = r === 'admin' ? 'block' : 'none';
 }
 function setTab(t) {
   document.getElementById('tab-login-btn').classList.toggle('active', t === 'login');
@@ -222,6 +254,42 @@ async function submitFirstAdmin() {
     alert('Admin account created. You can now sign in as Coach / Admin.');
     closeModal('first-admin-modal');
     setRole('admin');
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  }
+}
+
+/* ---- Request-admin modal (second+ admin, needs phpMyAdmin approval) ---- */
+function openRequestAdminModal(e) {
+  e.preventDefault();
+  document.getElementById('ra-name').value = '';
+  document.getElementById('ra-email').value = '';
+  document.getElementById('ra-password').value = '';
+  document.getElementById('ra-error').style.display = 'none';
+  document.getElementById('ra-success').style.display = 'none';
+  document.getElementById('ra-submit-btn').style.display = 'block';
+  document.getElementById('request-admin-modal').classList.add('open');
+}
+async function submitRequestAdmin() {
+  const errEl = document.getElementById('ra-error');
+  errEl.style.display = 'none';
+  try {
+    const body = {
+      name: document.getElementById('ra-name').value.trim(),
+      email: document.getElementById('ra-email').value.trim(),
+      password: document.getElementById('ra-password').value
+    };
+    if (!body.name || !body.email || !body.password) throw new Error('All fields are required');
+    if (body.password.length < 6) throw new Error('Password must be at least 6 characters');
+    await apiRequest('/auth/request-admin', { method: 'POST', auth: false, body });
+    const successEl = document.getElementById('ra-success');
+    successEl.innerHTML = `Request submitted for <strong>${esc(body.email)}</strong>.<br><br>
+      To approve it: hPanel → Databases → phpMyAdmin → open the <code>Users</code> table →
+      find this row → change its <code>status</code> from <code>pending_approval</code> to
+      <code>active</code>. It can then sign in as Coach / Admin.`;
+    successEl.style.display = 'block';
+    document.getElementById('ra-submit-btn').style.display = 'none';
   } catch (err) {
     errEl.textContent = err.message;
     errEl.style.display = 'block';
