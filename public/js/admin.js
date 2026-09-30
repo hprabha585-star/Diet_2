@@ -208,6 +208,47 @@ async function loadProtocolDefaults() {
   const preset = document.getElementById('assign-day-preset');
   preset.innerHTML = '<option value="">Pick a 55-day default to pre-fill…</option>' +
     protocolDefaults.map(d => `<option value="${d.day}">Day ${d.day} — ${esc(d.label || d.phase)}</option>`).join('');
+  renderProtocol55Page(data);
+}
+
+/* ------------------------------------------------------------------ */
+/* 55-day protocol — the coach's baseline document, browsable as its    */
+/* own page instead of buried inside Assign Plan's day-preset dropdown  */
+/* or Program guide's "Fill from 55-day protocol" button.               */
+/* ------------------------------------------------------------------ */
+function renderProtocol55Page(data) {
+  const listEl = document.getElementById('protocol55-list');
+  if (!listEl) return;
+
+  let lastPhase = null;
+  listEl.innerHTML = data.days.map(d => {
+    const phaseHeader = d.phase !== lastPhase ? (() => {
+      lastPhase = d.phase;
+      const goal = data.phaseGoals ? data.phaseGoals[d.phase] : '';
+      return `<div class="protocol-phase-head">
+        <h3>${esc(d.phase)}</h3>
+        ${goal ? `<p class="hint">${esc(goal)}</p>` : ''}
+      </div>`;
+    })() : '';
+
+    const windowText = d.isFullDayFast
+      ? 'Full-day fast — water and electrolytes only'
+      : `Eating window ${fmtHour12(d.startHour)} – ${fmtHour12(d.endHour)} (${d.eatingHours}h eating / ${d.fastingHours}h fasting)`;
+
+    return `${phaseHeader}
+      <div class="card protocol-day-card">
+        <div class="protocol-day-head">
+          <span class="protocol-day-num">Day ${d.day}</span>
+          ${d.label ? `<span class="badge badge-active">${esc(d.label)}</span>` : ''}
+        </div>
+        <div class="protocol-day-window">${esc(windowText)} · water target ${d.waterTargetMl}ml</div>
+        <p class="protocol-day-focus">${esc(d.focus)}</p>
+      </div>`;
+  }).join('');
+
+  document.getElementById('protocol55-safety').innerHTML = `
+    <h3>Safety guidelines</h3>
+    <ul class="safety-list">${(data.safetyNotes || []).map(s => `<li>${esc(s)}</li>`).join('')}</ul>`;
 }
 
 let assignedDaysCache = [];

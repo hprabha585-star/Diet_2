@@ -202,3 +202,30 @@ doesn't need to go find the README to know what happens next.
 
 Files touched: `public/index.html`, `README.md` (updated to describe
 both paths accurately). Nothing else.
+
+## Update — 2026-09-28 (later)
+
+**No schema changes, no migrate needed.** Upload and restart.
+
+**Leaderboard, client side.** The backend route (`GET /client/leaderboard`)
+already existed — it just had no page. There's now a **Leaderboard**
+sidebar item showing the same points/current-streak/best-streak table the
+coach sees, with the signed-in client's own row highlighted.
+
+**55-day protocol, its own page in admin.** Previously the baseline
+55-day programme only surfaced two ways: buried in Assign Plan's day
+picker dropdown, or as a "Fill from 55-day protocol" button inside
+Program guide's per-client editor. There's now a dedicated **55-day
+protocol** sidebar item — a straight, read-only walk through all 55 days
+grouped by phase, each with that phase's goal, the day's eating/fasting
+window (or full-day fast), water target and focus text, plus the safety
+guidelines at the bottom. This is the same reference data everything
+else already pulled from (`utils/protocolDefaults.js`) — to change the
+baseline programme itself, that file is still the place to edit (as the
+README says); this page is for browsing it, not per-client customization
+— that's still what Program guide is for.
+
+Files touched: `routes/admin.js`, `routes/client.js` (leaderboard route
+already existed, untouched), `public/js/admin.js`, `public/js/client.js`,
+`public/admin/dashboard.html`, `public/client/dashboard.html`,
+`public/css/dashboard.css`.

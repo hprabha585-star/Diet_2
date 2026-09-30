@@ -21,6 +21,7 @@
       <a href="#today" class="nav-link active" data-view="today"><span class="ico">☉</span><span>Today</span></a>
       <a href="#history" class="nav-link" data-view="history"><span class="ico">☷</span><span>History &amp; weight</span></a>
       <a href="#guide" class="nav-link" data-view="guide"><span class="ico">✎</span><span>Program guide</span></a>
+      <a href="#leaderboard" class="nav-link" data-view="leaderboard"><span class="ico">★</span><span>Leaderboard</span></a>
       <a href="#chat" class="nav-link" data-view="chat"><span class="ico">✉</span><span>Message coach</span></a>
       <a href="#referral" class="nav-link" data-view="referral"><span class="ico">⇄</span><span>Refer &amp; earn</span></a>
       <a href="/client/tracker.html" class="nav-link" id="nav-tracker"><span class="ico">◔</span><span>Fasting Tracker</span><span class="nav-lock" id="nav-tracker-lock">🔒</span></a>
@@ -156,6 +157,19 @@
       <div class="view" id="view-guide">
         <div class="page-intro"><h2>Program guide</h2><p class="hint">What your coach has planned for each day.</p></div>
         <div id="guide-list"><p class="hint">Loading…</p></div>
+      </div>
+
+      <!-- LEADERBOARD -->
+      <div class="view" id="view-leaderboard">
+        <div class="page-intro"><h2>Leaderboard</h2><p class="hint">Points and streaks across the whole cohort.</p></div>
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div class="table-scroll">
+            <table class="table">
+              <thead><tr><th>#</th><th>Client</th><th>Points</th><th>Streak</th><th>Best streak</th></tr></thead>
+              <tbody id="client-leaderboard-body"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <!-- ALERTS -->

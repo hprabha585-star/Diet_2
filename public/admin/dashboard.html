@@ -20,6 +20,7 @@
     <nav>
       <a href="#roster" class="nav-link active" data-view="roster"><span class="ico">☷</span><span>Client roster</span></a>
       <a href="#programguide" class="nav-link" data-view="programguide"><span class="ico">✎</span><span>Program guide</span></a>
+      <a href="#protocol55" class="nav-link" data-view="protocol55"><span class="ico">▤</span><span>55-day protocol</span></a>
       <a href="#payments" class="nav-link" data-view="payments"><span class="ico">₹</span><span>Payment approvals</span></a>
       <a href="#leaderboard" class="nav-link" data-view="leaderboard"><span class="ico">★</span><span>Leaderboard</span></a>
       <a href="#payouts" class="nav-link" data-view="payouts"><span class="ico">↗</span><span>Referral payouts</span></a>
@@ -59,6 +60,19 @@
         </div>
         <input type="text" class="roster-search" id="guide-client-search" placeholder="Search clients…" oninput="renderProgramGuidePicker()" style="max-width:280px;padding:10px 13px;border:1px solid var(--line);border-radius:var(--radius-sm);margin-bottom:14px;">
         <div id="guide-client-list" class="roster-list"><p class="hint">Loading…</p></div>
+      </div>
+
+      <!-- 55-DAY PROTOCOL — the coach's baseline document, browsable in-app.
+           This is the reference data itself (utils/protocolDefaults.js) —
+           read-only here; to change the baseline protocol, edit that file.
+           Per-client day text lives in Program guide, above. -->
+      <div class="view" id="view-protocol55">
+        <div class="page-intro">
+          <h2>55-day protocol</h2>
+          <p class="hint">The coach's baseline programme — what Program guide's "Fill from 55-day protocol" and Assign Plan's day presets pull from.</p>
+        </div>
+        <div id="protocol55-list"><p class="hint">Loading…</p></div>
+        <div class="card safety-card" id="protocol55-safety" style="margin-top:20px;"></div>
       </div>
 
       <!-- PAYMENTS -->

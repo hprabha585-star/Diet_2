@@ -9,7 +9,7 @@ const {
 } = require('../models');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { generateReferralCode } = require('../utils/helpers');
-const { PROTOCOL_DAYS, SAFETY_NOTES, guideTextFor } = require('../utils/protocolDefaults');
+const { PROTOCOL_DAYS, SAFETY_NOTES, PHASE_GOALS, guideTextFor } = require('../utils/protocolDefaults');
 const { MEAL_PRESETS } = require('../utils/mealPresets');
 
 const router = express.Router();
@@ -154,8 +154,9 @@ router.post('/clients/:id/pause', async (req, res) => {
 /* ------------------------------------------------------------------ */
 
 // GET /api/admin/protocol-defaults  — static reference for the day picker
+// AND the standalone "55-day protocol" reference page.
 router.get('/protocol-defaults', (req, res) => {
-  res.json({ days: PROTOCOL_DAYS, safetyNotes: SAFETY_NOTES });
+  res.json({ days: PROTOCOL_DAYS, safetyNotes: SAFETY_NOTES, phaseGoals: PHASE_GOALS });
 });
 
 // GET /api/admin/meal-presets — quick-add library for the Assign Plan meal rows.

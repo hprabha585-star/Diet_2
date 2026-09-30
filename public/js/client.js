@@ -54,6 +54,7 @@ function showView(view) {
   if (view === 'chat') loadChat();
   if (view === 'history') loadHistoryPage();
   if (view === 'guide') loadProgramGuide();
+  if (view === 'leaderboard') loadClientLeaderboard();
 }
 
 /* ------------------------------------------------------------------ */
@@ -97,6 +98,26 @@ async function loadProgramGuide() {
       </div>`).join('');
   } catch (err) {
     el.innerHTML = `<p class="hint">${esc(err.message)}</p>`;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Leaderboard — points/streaks across the whole coached cohort         */
+/* ------------------------------------------------------------------ */
+async function loadClientLeaderboard() {
+  const body = document.getElementById('client-leaderboard-body');
+  try {
+    const data = await apiRequest('/client/leaderboard');
+    body.innerHTML = data.leaderboard.map((c, i) => `
+      <tr class="${c.id === currentUser.id ? 'you-row' : ''}">
+        <td>${i + 1}</td>
+        <td>${esc(c.name)}${c.id === currentUser.id ? ' <span class="badge badge-active">You</span>' : ''}</td>
+        <td>${c.points}</td>
+        <td>${c.streakCurrent}</td>
+        <td>${c.streakBest}</td>
+      </tr>`).join('') || '<tr><td colspan="5" class="muted">No one on the board yet.</td></tr>';
+  } catch (err) {
+    body.innerHTML = `<tr><td colspan="5" class="muted">${esc(err.message)}</td></tr>`;
   }
 }
 
