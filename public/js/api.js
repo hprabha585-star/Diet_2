@@ -104,6 +104,25 @@ function fmtHour12(hourFloat) {
   return `${h12}:${String(mm).padStart(2, '0')} ${period}`;
 }
 
+// Shared across every page (sign-in, client dashboard, tracker, admin):
+// pulls the coach's site name + logo and applies them wherever ".brand"
+// or ".nav-logo" appears. Public endpoint — works before login too, so
+// the sign-in page itself is branded. Cosmetic only: never blocks or
+// breaks the page if it fails.
+async function applyBranding() {
+  try {
+    const s = await apiRequest('/site-settings', { auth: false });
+    if (!s) return;
+    const name = esc(s.siteName || 'FastCoach');
+    document.title = document.title.replace(/FastCoach/g, s.siteName || 'FastCoach');
+    document.querySelectorAll('.nav-logo, .brand').forEach(el => {
+      el.innerHTML = s.logoBase64
+        ? `<img src="${s.logoBase64}" class="site-logo-img" alt="${name}">${name}`
+        : name;
+    });
+  } catch (err) { /* branding is cosmetic — never block the page over it */ }
+}
+
 function fmtCountdown(totalSeconds) {
   const s = Math.max(0, Math.round(totalSeconds));
   const hh = Math.floor(s / 3600), mm = Math.floor((s % 3600) / 60), ss = s % 60;

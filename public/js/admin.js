@@ -13,6 +13,7 @@ async function init() {
   const user = requireRoleOrRedirect('admin');
   if (!user) return;
   document.getElementById('user-chip').textContent = user.name;
+  applyBranding();
 
   document.querySelectorAll('.nav-link').forEach(a => {
     a.addEventListener('click', (e) => { e.preventDefault(); showView(a.dataset.view); });
@@ -27,6 +28,7 @@ async function init() {
   loadPayouts();
   loadReferrals();
   loadSettings();
+  loadSiteSettings();
   loadThreads();
   chatPoll = setInterval(() => { if (currentThreadClientId) loadThread(currentThreadClientId, true); loadThreads(); }, 15000);
 }
@@ -216,7 +218,10 @@ async function loadProtocolDefaults() {
 /* own page instead of buried inside Assign Plan's day-preset dropdown  */
 /* or Program guide's "Fill from 55-day protocol" button.               */
 /* ------------------------------------------------------------------ */
+let protocol55Cache = { days: [], phaseGoals: {}, safetyNotes: [] };
+
 function renderProtocol55Page(data) {
+  protocol55Cache = data;
   const listEl = document.getElementById('protocol55-list');
   if (!listEl) return;
 
@@ -224,10 +229,21 @@ function renderProtocol55Page(data) {
   listEl.innerHTML = data.days.map(d => {
     const phaseHeader = d.phase !== lastPhase ? (() => {
       lastPhase = d.phase;
-      const goal = data.phaseGoals ? data.phaseGoals[d.phase] : '';
+      const goal = (data.phaseGoals && data.phaseGoals[d.phase]) || '';
+      const phaseKey = jsStr(d.phase);
       return `<div class="protocol-phase-head">
-        <h3>${esc(d.phase)}</h3>
-        ${goal ? `<p class="hint">${esc(goal)}</p>` : ''}
+        <div class="protocol-phase-head-row">
+          <h3>${esc(d.phase)}</h3>
+          <button class="btn-ghost btn-sm" onclick="editPhaseGoal('${phaseKey}')">✎ Edit goal</button>
+        </div>
+        <p class="hint" id="phase-goal-text-${slugify(d.phase)}">${esc(goal)}</p>
+        <div class="phase-goal-edit" id="phase-goal-edit-${slugify(d.phase)}" style="display:none;">
+          <textarea rows="2">${esc(goal)}</textarea>
+          <div style="display:flex;gap:8px;margin-top:6px;">
+            <button class="btn btn-primary btn-sm" onclick="savePhaseGoal('${phaseKey}')">Save</button>
+            <button class="btn-ghost btn-sm" onclick="cancelPhaseGoal('${phaseKey}')">Cancel</button>
+          </div>
+        </div>
       </div>`;
     })() : '';
 
@@ -236,19 +252,124 @@ function renderProtocol55Page(data) {
       : `Eating window ${fmtHour12(d.startHour)} – ${fmtHour12(d.endHour)} (${d.eatingHours}h eating / ${d.fastingHours}h fasting)`;
 
     return `${phaseHeader}
-      <div class="card protocol-day-card">
+      <div class="card protocol-day-card" id="protocol-day-${d.day}">
         <div class="protocol-day-head">
           <span class="protocol-day-num">Day ${d.day}</span>
           ${d.label ? `<span class="badge badge-active">${esc(d.label)}</span>` : ''}
+          <button class="btn-ghost btn-sm" style="margin-left:auto;" onclick="editProtocolDay(${d.day})">✎ Edit</button>
         </div>
-        <div class="protocol-day-window">${esc(windowText)} · water target ${d.waterTargetMl}ml</div>
-        <p class="protocol-day-focus">${esc(d.focus)}</p>
+        <div class="protocol-day-view">
+          <div class="protocol-day-window">${esc(windowText)} · water target ${d.waterTargetMl}ml</div>
+          <p class="protocol-day-focus">${esc(d.focus)}</p>
+        </div>
+        <div class="protocol-day-form" style="display:none;"></div>
       </div>`;
   }).join('');
 
+  renderSafetyNotes(data.safetyNotes || []);
+}
+
+function renderSafetyNotes(notes) {
   document.getElementById('protocol55-safety').innerHTML = `
-    <h3>Safety guidelines</h3>
-    <ul class="safety-list">${(data.safetyNotes || []).map(s => `<li>${esc(s)}</li>`).join('')}</ul>`;
+    <div class="row-between"><h3>Safety guidelines</h3>
+      <button class="btn-ghost btn-sm" onclick="editSafetyNotes()">✎ Edit</button></div>
+    <ul class="safety-list" id="safety-notes-view">${notes.map(s => `<li>${esc(s)}</li>`).join('')}</ul>
+    <div id="safety-notes-edit" style="display:none;">
+      <textarea id="safety-notes-textarea" rows="6" placeholder="One guideline per line">${notes.map(esc).join('\n')}</textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="btn btn-primary btn-sm" onclick="saveSafetyNotes()">Save</button>
+        <button class="btn-ghost btn-sm" onclick="document.getElementById('safety-notes-view').style.display='block';document.getElementById('safety-notes-edit').style.display='none';">Cancel</button>
+      </div>
+    </div>`;
+}
+
+function slugify(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-'); }
+
+/* ---- Edit a single day ---- */
+function editProtocolDay(day) {
+  const card = document.getElementById(`protocol-day-${day}`);
+  const d = protocol55Cache.days.find(x => x.day === day);
+  if (!card || !d) return;
+  card.querySelector('.protocol-day-view').style.display = 'none';
+  const form = card.querySelector('.protocol-day-form');
+  form.style.display = 'block';
+  form.innerHTML = `
+    <div class="field"><label>Label (optional)</label><input type="text" id="pd-label-${day}" value="${esc(d.label || '')}"></div>
+    <label class="check-line"><input type="checkbox" id="pd-fullfast-${day}" ${d.isFullDayFast ? 'checked' : ''}
+      onchange="document.getElementById('pd-window-${day}').style.display = this.checked ? 'none' : 'flex';"> Full-day fast (no eating window)</label>
+    <div class="custom-row" id="pd-window-${day}" style="display:${d.isFullDayFast ? 'none' : 'flex'};">
+      <div class="field"><label>Eating window start (24h)</label><input type="number" id="pd-start-${day}" step="0.5" value="${d.startHour}"></div>
+      <div class="field"><label>Eating window end (24h)</label><input type="number" id="pd-end-${day}" step="0.5" value="${d.endHour}"></div>
+    </div>
+    <div class="field"><label>Water target (ml)</label><input type="number" id="pd-water-${day}" value="${d.waterTargetMl}"></div>
+    <div class="field"><label>Focus / notes for the day</label><textarea id="pd-focus-${day}" rows="3">${esc(d.focus || '')}</textarea></div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-primary btn-sm" onclick="saveProtocolDay(${day})">Save</button>
+      <button class="btn-ghost btn-sm" onclick="cancelProtocolDay(${day})">Cancel</button>
+    </div>`;
+}
+function cancelProtocolDay(day) {
+  const card = document.getElementById(`protocol-day-${day}`);
+  if (!card) return;
+  card.querySelector('.protocol-day-view').style.display = 'block';
+  card.querySelector('.protocol-day-form').style.display = 'none';
+}
+async function saveProtocolDay(day) {
+  try {
+    const isFullDayFast = document.getElementById(`pd-fullfast-${day}`).checked;
+    const body = {
+      label: document.getElementById(`pd-label-${day}`).value,
+      isFullDayFast,
+      waterTargetMl: document.getElementById(`pd-water-${day}`).value,
+      focus: document.getElementById(`pd-focus-${day}`).value
+    };
+    if (!isFullDayFast) {
+      body.startHour = document.getElementById(`pd-start-${day}`).value;
+      body.endHour = document.getElementById(`pd-end-${day}`).value;
+    }
+    const res = await apiRequest(`/admin/protocol-defaults/${day}`, { method: 'PATCH', body });
+    const idx = protocol55Cache.days.findIndex(x => x.day === day);
+    if (idx > -1) protocol55Cache.days[idx] = res.day;
+    renderProtocol55Page(protocol55Cache);
+    // Day presets elsewhere (Assign Plan's dropdown) read this same cache.
+    protocolDefaults = protocol55Cache.days;
+  } catch (err) { alert(err.message); }
+}
+
+/* ---- Edit a phase goal ---- */
+function editPhaseGoal(phase) {
+  const key = slugify(phase);
+  document.getElementById(`phase-goal-text-${key}`).style.display = 'none';
+  document.getElementById(`phase-goal-edit-${key}`).style.display = 'block';
+}
+function cancelPhaseGoal(phase) {
+  const key = slugify(phase);
+  document.getElementById(`phase-goal-text-${key}`).style.display = 'block';
+  document.getElementById(`phase-goal-edit-${key}`).style.display = 'none';
+}
+async function savePhaseGoal(phase) {
+  const key = slugify(phase);
+  const value = document.querySelector(`#phase-goal-edit-${key} textarea`).value;
+  try {
+    const phaseGoals = { ...(protocol55Cache.phaseGoals || {}), [phase]: value };
+    await apiRequest('/admin/protocol-defaults/phase-info', { method: 'PUT', body: { phaseGoals } });
+    protocol55Cache.phaseGoals = phaseGoals;
+    renderProtocol55Page(protocol55Cache);
+  } catch (err) { alert(err.message); }
+}
+
+/* ---- Edit safety notes ---- */
+function editSafetyNotes() {
+  document.getElementById('safety-notes-view').style.display = 'none';
+  document.getElementById('safety-notes-edit').style.display = 'block';
+}
+async function saveSafetyNotes() {
+  try {
+    const notes = document.getElementById('safety-notes-textarea').value.split('\n').map(s => s.trim()).filter(Boolean);
+    await apiRequest('/admin/protocol-defaults/phase-info', { method: 'PUT', body: { safetyNotes: notes } });
+    protocol55Cache.safetyNotes = notes;
+    renderSafetyNotes(notes);
+  } catch (err) { alert(err.message); }
 }
 
 let assignedDaysCache = [];
@@ -771,6 +892,7 @@ function openPlanModal(plan) {
   document.getElementById('plan-duration').value = plan ? plan.durationDays : 55;
   document.getElementById('plan-tagline').value = plan ? plan.tagline || '' : '';
   document.getElementById('plan-features').value = plan ? (plan.features || []).join('\n') : '';
+  document.getElementById('plan-brochure').value = plan ? plan.brochure || '' : '';
   document.getElementById('plan-error').style.display = 'none';
   openModal('plan-modal');
 }
@@ -785,7 +907,8 @@ async function submitPlan() {
       priceInr: parseInt(document.getElementById('plan-price').value, 10),
       durationDays: parseInt(document.getElementById('plan-duration').value, 10),
       tagline: document.getElementById('plan-tagline').value,
-      features: document.getElementById('plan-features').value.split('\n').map(s => s.trim()).filter(Boolean)
+      features: document.getElementById('plan-features').value.split('\n').map(s => s.trim()).filter(Boolean),
+      brochure: document.getElementById('plan-brochure').value
     };
     if (id) await apiRequest(`/admin/plans/${id}`, { method: 'PUT', body });
     else await apiRequest('/admin/plans', { method: 'POST', body });
@@ -887,6 +1010,68 @@ async function saveSettings() {
   fields.forEach(f => body[f] = document.getElementById(`set-${f}`).value);
   try { await apiRequest('/admin/settings', { method: 'PUT', body }); alert('Saved.'); }
   catch (err) { alert(err.message); }
+}
+
+/* ------------------------------------------------------------------ */
+/* Site settings — website name + logo (applies everywhere, including   */
+/* the sign-in page, via the public /api/site-settings + applyBranding) */
+/* ------------------------------------------------------------------ */
+let pendingLogoBase64 = undefined; // undefined = unchanged, null = remove, string = new logo
+
+async function loadSiteSettings() {
+  const el = document.getElementById('site-settings-card');
+  if (!el) return;
+  pendingLogoBase64 = undefined;
+  try {
+    const s = await apiRequest('/site-settings', { auth: false });
+    el.innerHTML = `
+      <div class="field" style="max-width:360px;"><label>Website name</label>
+        <input type="text" id="site-name-input" value="${esc(s.siteName || 'FastCoach')}" placeholder="FastCoach">
+      </div>
+      <div class="field"><label>Logo</label>
+        <div class="logo-row">
+          <div class="logo-preview" id="logo-preview">
+            ${s.logoBase64 ? `<img src="${s.logoBase64}" alt="Current logo">` : '<span class="hint">No logo set — using text only</span>'}
+          </div>
+          <div>
+            <input type="file" id="logo-file-input" accept="image/png,image/jpeg,image/svg+xml,image/webp" onchange="handleLogoFile(this)">
+            <div class="hint" style="margin-top:6px;">PNG, JPG, SVG or WebP. Shown at a small size in the nav/sidebar, so keep it simple.</div>
+            ${s.logoBase64 ? `<button class="btn-ghost btn-sm" style="margin-top:6px;" onclick="removeLogo()">Remove logo</button>` : ''}
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="saveSiteSettings()">Save site settings</button>`;
+  } catch (err) {
+    el.innerHTML = `<p class="error-text">${esc(err.message)}</p>`;
+  }
+}
+
+function handleLogoFile(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  if (file.size > 1.5 * 1024 * 1024) { alert('Please use an image under 1.5MB.'); input.value = ''; return; }
+  const reader = new FileReader();
+  reader.onload = () => {
+    pendingLogoBase64 = reader.result; // data: URI, stored as-is
+    document.getElementById('logo-preview').innerHTML = `<img src="${reader.result}" alt="New logo preview">`;
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeLogo() {
+  pendingLogoBase64 = null;
+  document.getElementById('logo-preview').innerHTML = '<span class="hint">No logo set — using text only</span>';
+}
+
+async function saveSiteSettings() {
+  try {
+    const body = { siteName: document.getElementById('site-name-input').value };
+    if (pendingLogoBase64 !== undefined) body.logoBase64 = pendingLogoBase64;
+    await apiRequest('/admin/branding', { method: 'PUT', body });
+    await applyBranding(); // refresh this page's own sidebar immediately
+    await loadSiteSettings();
+    alert('Saved. The new name/logo will show everywhere, including the sign-in page.');
+  } catch (err) { alert(err.message); }
 }
 
 /* ------------------------------------------------------------------ */

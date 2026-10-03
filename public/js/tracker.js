@@ -60,6 +60,7 @@ async function init() {
   const user = requireRoleOrRedirect('client');
   if (!user) return;
   document.getElementById('user-chip').textContent = user.name;
+  applyBranding();
 
   document.querySelectorAll('.nav-link[data-view]').forEach(a => {
     a.addEventListener('click', (e) => { e.preventDefault(); showView(a.dataset.view); });

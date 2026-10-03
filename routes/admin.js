@@ -5,11 +5,15 @@ const {
   User, WeightLog, Plan, Payment, Payout,
   Regimen, RegimenMeal, RegimenMilestone,
   ChecklistLog, ChecklistItem, WaterEntry,
-  Alert, AlertRead, Message, Settings, TrackerSession, TrackerWaterEntry
+  Alert, AlertRead, Message, Settings, ProtocolDay, TrackerSession, TrackerWaterEntry
 } = require('../models');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { generateReferralCode } = require('../utils/helpers');
-const { PROTOCOL_DAYS, SAFETY_NOTES, PHASE_GOALS, guideTextFor } = require('../utils/protocolDefaults');
+// Fallbacks only — the coach's live, editable protocol lives in the
+// ProtocolDay table and Settings.protocolPhaseGoals/protocolSafetyNotes
+// (see models/index.js); this file's static data is just the original
+// seed for a fresh database.
+const { SAFETY_NOTES, PHASE_GOALS } = require('../utils/protocolDefaults');
 const { MEAL_PRESETS } = require('../utils/mealPresets');
 
 const router = express.Router();
@@ -153,10 +157,71 @@ router.post('/clients/:id/pause', async (req, res) => {
 /* truth — there's no separate template that can drift out of sync.    */
 /* ------------------------------------------------------------------ */
 
-// GET /api/admin/protocol-defaults  — static reference for the day picker
-// AND the standalone "55-day protocol" reference page.
-router.get('/protocol-defaults', (req, res) => {
-  res.json({ days: PROTOCOL_DAYS, safetyNotes: SAFETY_NOTES, phaseGoals: PHASE_GOALS });
+// GET /api/admin/protocol-defaults — the coach's LIVE 55-day protocol
+// (editable, backed by the ProtocolDay table — see models/index.js).
+// Feeds the day picker, "Fill from 55-day protocol", and the standalone
+// 55-day protocol page alike, so an edit here shows up everywhere at once.
+router.get('/protocol-defaults', async (req, res) => {
+  try {
+    const days = await ProtocolDay.getAllOrSeed();
+    const settings = await Settings.getOrCreate();
+    res.json({
+      days,
+      phaseGoals: settings.protocolPhaseGoals || PHASE_GOALS,
+      safetyNotes: settings.protocolSafetyNotes || SAFETY_NOTES
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not load the 55-day protocol', detail: err.message });
+  }
+});
+
+// PATCH /api/admin/protocol-defaults/:day — edit one day of the baseline
+// protocol. Only touches this reference table, never a client's own
+// assigned Regimen — a client already on this day keeps whatever was
+// assigned to them until the coach re-assigns or re-seeds their guide.
+router.patch('/protocol-defaults/:day', async (req, res) => {
+  try {
+    const day = parseInt(req.params.day, 10);
+    const row = await ProtocolDay.findOne({ where: { day } });
+    if (!row) return res.status(404).json({ error: `Day ${day} not found in the protocol` });
+
+    for (const f of ['phase', 'protocolType', 'label', 'focus']) {
+      if (typeof req.body[f] === 'string') row[f] = req.body[f];
+    }
+    if (typeof req.body.isFullDayFast === 'boolean') row.isFullDayFast = req.body.isFullDayFast;
+    if (req.body.waterTargetMl !== undefined) row.waterTargetMl = parseInt(req.body.waterTargetMl, 10) || row.waterTargetMl;
+    if (row.isFullDayFast) {
+      row.startHour = 9; row.endHour = 9;
+      row.eatingHours = 0; row.fastingHours = 24;
+    } else {
+      if (req.body.startHour !== undefined) row.startHour = parseFloat(req.body.startHour);
+      if (req.body.endHour !== undefined) row.endHour = parseFloat(req.body.endHour);
+      const eating = Math.round((row.endHour - row.startHour) * 10) / 10;
+      row.eatingHours = eating;
+      row.fastingHours = Math.round((24 - eating) * 10) / 10;
+    }
+    await row.save();
+    res.json({ day: row });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not save that day', detail: err.message });
+  }
+});
+
+// PUT /api/admin/protocol-defaults/phase-info — edit the six phase goal
+// sentences and/or the safety guideline list shown on the 55-day
+// protocol page (and used as the "phase goal" appended when seeding
+// Program guide). Stored on Settings; null falls back to the coach's
+// original document text.
+router.put('/protocol-defaults/phase-info', async (req, res) => {
+  try {
+    const settings = await Settings.getOrCreate();
+    if (req.body.phaseGoals && typeof req.body.phaseGoals === 'object') settings.protocolPhaseGoals = req.body.phaseGoals;
+    if (Array.isArray(req.body.safetyNotes)) settings.protocolSafetyNotes = req.body.safetyNotes;
+    await settings.save();
+    res.json({ phaseGoals: settings.protocolPhaseGoals, safetyNotes: settings.protocolSafetyNotes });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not save phase info', detail: err.message });
+  }
 });
 
 // GET /api/admin/meal-presets — quick-add library for the Assign Plan meal rows.
@@ -334,44 +399,53 @@ router.post('/clients/:id/set-day', async (req, res) => {
 });
 
 // POST /api/admin/clients/:id/program-guide/seed-defaults — fills the
-// Program Guide's day-info text from the coach's 55-day protocol
-// document (utils/protocolDefaults.js), so a fresh guide isn't a wall of
-// "Not written yet." By default only touches days that have no text of
-// their own yet; overwrite:true replaces everything. Never touches a
-// day's window/meals/habits — focus (and phase label) only. A day that
-// doesn't exist yet is created with the protocol's own window as a
-// starting point; an existing day's window/meals are left exactly as
-// the coach set them.
+// Program Guide's day-info text from the coach's LIVE 55-day protocol
+// (the ProtocolDay table — whatever the coach has it set to right now,
+// including any edits made on the 55-day protocol page), so a fresh
+// guide isn't a wall of "Not written yet." By default only touches days
+// that have no text of their own yet; overwrite:true replaces
+// everything. Never touches a day's window/meals/habits — focus (and
+// phase label) only. A day that doesn't exist yet is created with the
+// protocol's own window as a starting point; an existing day's
+// window/meals are left exactly as the coach set them.
 router.post('/clients/:id/program-guide/seed-defaults', async (req, res) => {
   try {
     const client = await User.findOne({ where: { id: req.params.id, role: 'client' } });
     if (!client) return res.status(404).json({ error: 'Client not found' });
     if (client.planMode !== 'protocol') return res.status(400).json({ error: 'This client is on the Fasting Tracker plan and has no Program Guide.' });
 
+    const protocolDays = await ProtocolDay.getAllOrSeed();
+    const settings = await Settings.getOrCreate();
+    const phaseGoals = settings.protocolPhaseGoals || PHASE_GOALS;
+    const textFor = (d) => {
+      const goal = phaseGoals[d.phase];
+      return goal ? `${d.focus}\n\n${d.phase} goal: ${goal}` : d.focus;
+    };
+
     const overwrite = !!req.body.overwrite;
-    const maxDay = Math.max(client.challengeLengthDays, PROTOCOL_DAYS[PROTOCOL_DAYS.length - 1].day);
+    const maxDay = Math.max(client.challengeLengthDays, protocolDays[protocolDays.length - 1].day);
     if (maxDay > client.challengeLengthDays) { client.challengeLengthDays = maxDay; await client.save(); }
 
     let seeded = 0, skipped = 0;
-    for (const d of PROTOCOL_DAYS) {
+    for (const d of protocolDays) {
       const [regimen, created] = await Regimen.findOrCreate({
         where: { userId: client.id, day: d.day },
         defaults: {
           userId: client.id, day: d.day, phase: d.phase,
           startHour: d.startHour, endHour: d.endHour, isFullDayFast: d.isFullDayFast,
           protocolType: d.protocolType, waterTargetMl: d.waterTargetMl,
-          focus: guideTextFor(d.day)
+          focus: textFor(d)
         }
       });
       if (!created) {
         if (!overwrite && regimen.focus && regimen.focus.trim()) { skipped++; continue; }
-        regimen.focus = guideTextFor(d.day);
+        regimen.focus = textFor(d);
         if (!regimen.phase) regimen.phase = d.phase;
         await regimen.save();
       }
       seeded++;
     }
-    res.json({ seeded, skipped, total: PROTOCOL_DAYS.length });
+    res.json({ seeded, skipped, total: protocolDays.length });
   } catch (err) {
     res.status(500).json({ error: 'Could not seed the program guide', detail: err.message });
   }
@@ -564,11 +638,12 @@ router.get('/plans', async (req, res) => {
 
 router.post('/plans', async (req, res) => {
   try {
-    const { key, name, priceInr, durationDays, tagline, features, mode, order } = req.body;
+    const { key, name, priceInr, durationDays, tagline, features, brochure, mode, order } = req.body;
     if (!key || !name || !priceInr) return res.status(400).json({ error: 'key, name and priceInr are required' });
     const plan = await Plan.create({
       key: key.toLowerCase().trim(), name, priceInr, durationDays: durationDays || 55,
-      tagline: tagline || '', features: features || [], mode: mode === 'tracker' ? 'tracker' : 'protocol', order: order || 0
+      tagline: tagline || '', features: features || [], brochure: brochure || '',
+      mode: mode === 'tracker' ? 'tracker' : 'protocol', order: order || 0
     });
     res.status(201).json({ plan });
   } catch (err) {
@@ -580,12 +655,13 @@ router.put('/plans/:id', async (req, res) => {
   try {
     const plan = await Plan.findByPk(req.params.id);
     if (!plan) return res.status(404).json({ error: 'Plan not found' });
-    const { name, priceInr, durationDays, tagline, features, mode, order, active } = req.body;
+    const { name, priceInr, durationDays, tagline, features, brochure, mode, order, active } = req.body;
     if (name) plan.name = name;
     if (priceInr) plan.priceInr = priceInr;
     if (durationDays) plan.durationDays = durationDays;
     if (typeof tagline === 'string') plan.tagline = tagline;
     if (Array.isArray(features)) plan.features = features;
+    if (typeof brochure === 'string') plan.brochure = brochure;
     if (mode) plan.mode = mode === 'tracker' ? 'tracker' : 'protocol';
     if (typeof order === 'number') plan.order = order;
     if (typeof active === 'boolean') plan.active = active;
@@ -696,6 +772,23 @@ router.put('/settings', async (req, res) => {
   for (const f of fields) if (typeof req.body[f] === 'string') settings[f] = req.body[f];
   await settings.save();
   res.json({ settings });
+});
+
+// PUT /api/admin/branding — website name + logo. Kept as its own route
+// (rather than folded into /settings above) since a logo image can be a
+// sizeable base64 payload and this is edited far less often than contact
+// details. "" for siteName falls back to "FastCoach"; sending
+// logoBase64: null removes the logo (back to text-only branding).
+router.put('/branding', async (req, res) => {
+  try {
+    const settings = await Settings.getOrCreate();
+    if (typeof req.body.siteName === 'string') settings.siteName = req.body.siteName.trim() || 'FastCoach';
+    if (req.body.logoBase64 === null || typeof req.body.logoBase64 === 'string') settings.logoBase64 = req.body.logoBase64 || null;
+    await settings.save();
+    res.json({ siteName: settings.siteName, logoBase64: settings.logoBase64 });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not save branding', detail: err.message });
+  }
 });
 
 module.exports = router;

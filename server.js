@@ -7,7 +7,7 @@ const authRoutes = require('./routes/auth');
 const clientRoutes = require('./routes/client');
 const adminRoutes = require('./routes/admin');
 const trackerRoutes = require('./routes/tracker');
-const { Plan } = require('./models');
+const { Plan, Settings } = require('./models');
 
 const app = express();
 
@@ -57,6 +57,18 @@ app.get('/api/plans', async (req, res) => {
     res.json({ plans });
   } catch (err) {
     res.status(500).json({ error: 'Could not load plans' });
+  }
+});
+
+// Public: website name + logo, for the sign-in page (not logged in yet)
+// and every dashboard's sidebar. Deliberately only these two fields —
+// the rest of Settings (phone, UPI id, etc.) stays behind admin auth.
+app.get('/api/site-settings', async (req, res) => {
+  try {
+    const settings = await Settings.getOrCreate();
+    res.json({ siteName: settings.siteName || 'FastCoach', logoBase64: settings.logoBase64 || null });
+  } catch (err) {
+    res.json({ siteName: 'FastCoach', logoBase64: null }); // branding is cosmetic — never break the page over it
   }
 });
 

@@ -9,6 +9,7 @@ async function init() {
   currentUser = requireRoleOrRedirect('client');
   if (!currentUser) return;
   document.getElementById('user-chip').textContent = currentUser.name;
+  applyBranding();
 
   // Only intercept in-page views. The Fasting Tracker link is a real
   // link to its own page, so it must NOT be preventDefault()-ed.
@@ -838,11 +839,14 @@ async function loadContact() {
 /* ------------------------------------------------------------------ */
 /* Payment                                                               */
 /* ------------------------------------------------------------------ */
+let paymentPlansCache = [];
+
 async function loadPaymentView() {
   const [plansData, statusData] = await Promise.all([
     apiRequest('/client/plans', { auth: true }),
     apiRequest('/client/payment-status')
   ]);
+  paymentPlansCache = plansData.plans;
   const last = statusData.lastPayment;
   const statusHtml = last ? `<div class="card" style="margin-bottom:16px;">
       <span class="badge badge-${last.status === 'approved' ? 'active' : last.status === 'rejected' ? 'rejected' : 'pending'}">${esc(last.status)}</span>
@@ -852,11 +856,33 @@ async function loadPaymentView() {
   document.getElementById('payment-card').innerHTML = `
     ${statusHtml}
     <div class="field"><label>Plan</label>
-      <select id="pay-plan">${plansData.plans.map(p => `<option value="${p.key}">${esc(p.name)} — ₹${p.priceInr} (${p.mode === 'tracker' ? 'self-guided' : 'coached'})</option>`).join('')}</select>
+      <div style="display:flex;gap:8px;">
+        <select id="pay-plan" style="flex:1;" onchange="syncPlanDetailsButton()">${plansData.plans.map(p => `<option value="${p.key}">${esc(p.name)} — ₹${p.priceInr} (${p.mode === 'tracker' ? 'self-guided' : 'coached'})</option>`).join('')}</select>
+        <button class="btn btn-outline btn-sm" id="pay-plan-details-btn" onclick="openPlanDetails()" hidden>Details</button>
+      </div>
     </div>
     <div class="field"><label>UTR / UPI reference number</label><input type="text" id="pay-utr"></div>
     <div class="error-text" id="pay-error" style="display:none;"></div>
     <button class="btn btn-primary btn-sm" onclick="submitPayment()">Submit payment</button>`;
+  syncPlanDetailsButton();
+}
+
+function syncPlanDetailsButton() {
+  const sel = document.getElementById('pay-plan');
+  const btn = document.getElementById('pay-plan-details-btn');
+  if (!sel || !btn) return;
+  const plan = paymentPlansCache.find(p => p.key === sel.value);
+  btn.hidden = !(plan && plan.brochure);
+}
+
+function openPlanDetails() {
+  const sel = document.getElementById('pay-plan');
+  const plan = paymentPlansCache.find(p => p.key === sel.value);
+  if (!plan || !plan.brochure) return;
+  document.getElementById('plan-details-title').textContent = plan.name;
+  document.getElementById('plan-details-body').innerHTML =
+    plan.brochure.split('\n').filter(l => l.trim()).map(l => `<p>${esc(l)}</p>`).join('');
+  openModal('plan-details-modal');
 }
 async function submitPayment() {
   const errEl = document.getElementById('pay-error');

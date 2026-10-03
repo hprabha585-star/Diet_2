@@ -87,3 +87,8 @@ input, select, textarea { font-family: inherit; }
 .table th { text-align: left; font-size: 12px; color: #6B6F63; font-weight: 600; padding: 10px 12px; border-bottom: 1px solid var(--line); }
 .table td { padding: 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 .table tr:hover td { background: rgba(0,0,0,0.015); }
+
+/* Branding logo, shown inline with the site name wherever .nav-logo or
+   .brand appears (sign-in page nav, every dashboard's sidebar). */
+.site-logo-img { height: 28px; width: auto; vertical-align: middle; margin-right: 8px; border-radius: 4px; }
+.brand .site-logo-img { height: 24px; }

@@ -108,7 +108,11 @@ const Plan = sequelize.define('Plan', {
   features: { type: DataTypes.JSON, defaultValue: [] },
   mode: { type: DataTypes.ENUM('protocol', 'tracker'), defaultValue: 'protocol' },
   active: { type: DataTypes.BOOLEAN, defaultValue: true },
-  order: { type: DataTypes.INTEGER, defaultValue: 0 }
+  order: { type: DataTypes.INTEGER, defaultValue: 0 },
+  // Longer-form "what you get" text, shown to clients via a "View
+  // details" button — separate from the short tagline/bullet features
+  // already on the pricing card itself.
+  brochure: { type: DataTypes.TEXT }
 });
 
 Plan.DEFAULTS = [
@@ -263,6 +267,42 @@ const Message = sequelize.define('Message', {
 /* ------------------------------------------------------------------ */
 /* Settings (singleton "contact us")                                    */
 /* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+/* ProtocolDay — the coach's 55-day baseline programme, editable. This   */
+/* is the shared REFERENCE data (one row per day, no client attached)    */
+/* that Assign Plan's day picker, Program guide's "Fill from 55-day      */
+/* protocol", and the standalone 55-day protocol page all read from.     */
+/* Editing a row here changes what all three show from then on — it      */
+/* does NOT touch any client's already-assigned Regimen rows.            */
+/* ------------------------------------------------------------------ */
+const ProtocolDay = sequelize.define('ProtocolDay', {
+  day: { type: DataTypes.INTEGER, allowNull: false, unique: true },
+  phase: { type: DataTypes.STRING },
+  protocolType: { type: DataTypes.STRING },
+  label: { type: DataTypes.STRING },
+  startHour: { type: DataTypes.FLOAT, defaultValue: 9 },
+  endHour: { type: DataTypes.FLOAT, defaultValue: 17 },
+  isFullDayFast: { type: DataTypes.BOOLEAN, defaultValue: false },
+  eatingHours: { type: DataTypes.FLOAT },
+  fastingHours: { type: DataTypes.FLOAT },
+  focus: { type: DataTypes.TEXT },
+  waterTargetMl: { type: DataTypes.INTEGER, defaultValue: 3000 }
+});
+
+// Reads the coach's live, possibly-edited 55-day protocol. On a fresh
+// database (table exists but is empty) it seeds itself once from
+// utils/protocolDefaults.js's PROTOCOL_DAYS — after that, this table is
+// the source of truth and the static file is only the original seed.
+ProtocolDay.getAllOrSeed = async function () {
+  let rows = await ProtocolDay.findAll({ order: [['day', 'ASC']] });
+  if (!rows.length) {
+    const { PROTOCOL_DAYS } = require('../utils/protocolDefaults');
+    await ProtocolDay.bulkCreate(PROTOCOL_DAYS);
+    rows = await ProtocolDay.findAll({ order: [['day', 'ASC']] });
+  }
+  return rows;
+};
+
 const Settings = sequelize.define('Settings', {
   singleton: { type: DataTypes.STRING, defaultValue: 'main', unique: true },
   coachName: { type: DataTypes.STRING, defaultValue: '' },
@@ -276,7 +316,16 @@ const Settings = sequelize.define('Settings', {
   // A reusable "default day" — window + meals + habits — the coach can
   // save once from the Assign Plan modal and reload into any day for
   // any client, instead of retyping the same meals every day.
-  defaultDayTemplate: { type: DataTypes.JSON, defaultValue: null }
+  defaultDayTemplate: { type: DataTypes.JSON, defaultValue: null },
+  // Overrides for the static 55-day protocol's phase goals and safety
+  // notes (utils/protocolDefaults.js). null = still using the coach's
+  // original document text; set once the coach edits either from the
+  // 55-day protocol page.
+  protocolPhaseGoals: { type: DataTypes.JSON, defaultValue: null },
+  protocolSafetyNotes: { type: DataTypes.JSON, defaultValue: null },
+  // Branding — replaces "FastCoach" across the site once set.
+  siteName: { type: DataTypes.STRING, defaultValue: 'FastCoach' },
+  logoBase64: { type: DataTypes.TEXT('long'), defaultValue: null }
 });
 Settings.getOrCreate = async function () {
   let doc = await Settings.findOne({ where: { singleton: 'main' } });
@@ -419,6 +468,6 @@ module.exports = {
   sequelize, User, WeightLog, Plan, Payment, Payout,
   Regimen, RegimenMeal, RegimenMilestone,
   ChecklistLog, ChecklistItem, WaterEntry,
-  Alert, AlertRead, Message, Settings,
+  Alert, AlertRead, Message, Settings, ProtocolDay,
   TrackerSession, TrackerWaterEntry, TrackerProfile, MealEntry, RestDay, TrackerTaskLog
 };

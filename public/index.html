@@ -141,6 +141,17 @@
 </footer>
 
 <!-- ========== FIRST ADMIN MODAL ========== -->
+<!-- Plan brochure — "what this plan offers", shown via each pricing card's Details button -->
+<div class="modal-backdrop" id="brochure-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="brochure-title"></h3>
+      <button class="modal-close" onclick="closeModal('brochure-modal')">×</button>
+    </div>
+    <div id="brochure-body"></div>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="first-admin-modal">
   <div class="modal">
     <div class="modal-head">
@@ -339,10 +350,13 @@ async function doRegister(e) {
   }
 }
 
+let plansCache = [];
+
 async function loadPlans() {
   const grid = document.getElementById('pricing-grid');
   try {
     const data = await apiRequest('/plans', { auth: false });
+    plansCache = data.plans;
     if (!data.plans.length) { grid.innerHTML = '<p class="hint">No plans published yet.</p>'; return; }
     grid.innerHTML = data.plans.map((p, i) => `
       <div class="plan ${i === 0 ? 'featured' : ''}">
@@ -351,13 +365,26 @@ async function loadPlans() {
         <div class="price">₹${p.priceInr}<span>/ ${p.durationDays} days</span></div>
         <p style="font-size:14px;color:#3C4A41;margin-bottom:14px;">${esc(p.tagline || '')}</p>
         <ul>${(p.features || []).map(f => `<li>✓ ${esc(f)}</li>`).join('')}</ul>
-        <a href="#access" class="btn btn-dark" style="width:100%;">Choose ${esc(p.name)}</a>
+        <div style="display:flex;gap:10px;">
+          <a href="#access" class="btn btn-dark" style="flex:1;">Choose ${esc(p.name)}</a>
+          ${p.brochure ? `<button class="btn btn-outline" onclick="openBrochure(${p.id})">Details</button>` : ''}
+        </div>
       </div>
     `).join('');
   } catch (err) {
     grid.innerHTML = '<p class="hint">Could not load plans right now.</p>';
   }
 }
+
+function openBrochure(planId) {
+  const p = plansCache.find(x => x.id === planId);
+  if (!p) return;
+  document.getElementById('brochure-title').textContent = p.name;
+  document.getElementById('brochure-body').innerHTML =
+    (p.brochure || '').split('\n').filter(l => l.trim()).map(l => `<p>${esc(l)}</p>`).join('');
+  document.getElementById('brochure-modal').classList.add('open');
+}
+applyBranding();
 loadPlans();
 setRole('client');
 

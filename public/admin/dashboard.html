@@ -29,6 +29,7 @@
       <a href="#alerts" class="nav-link" data-view="alerts"><span class="ico">!</span><span>Send alerts</span></a>
       <a href="#chat" class="nav-link" data-view="chat"><span class="ico">✉</span><span>Messages</span><span class="nav-badge" id="badge-chat" hidden>0</span></a>
       <a href="#settings" class="nav-link" data-view="settings"><span class="ico">☎</span><span>Contact details</span></a>
+      <a href="#sitesettings" class="nav-link" data-view="sitesettings"><span class="ico">⚙</span><span>Site settings</span></a>
     </nav>
     <div class="sidebar-foot"><button class="logout-btn" onclick="logout()">Log out</button></div>
   </aside>
@@ -169,6 +170,12 @@
         <div class="card" id="settings-card"><p class="hint">Loading…</p></div>
       </div>
 
+      <!-- SITE SETTINGS — website name + logo, shown everywhere "FastCoach" appears -->
+      <div class="view" id="view-sitesettings">
+        <div class="page-intro"><h2>Site settings</h2><p class="hint">Changes here apply across the sign-in page and every dashboard.</p></div>
+        <div class="card" id="site-settings-card"><p class="hint">Loading…</p></div>
+      </div>
+
     </div>
   </main>
 </div>
@@ -305,6 +312,7 @@
     </div>
     <div class="field"><label>Tagline</label><input type="text" id="plan-tagline"></div>
     <div class="field"><label>Features (one per line)</label><textarea id="plan-features" rows="4"></textarea></div>
+    <div class="field"><label>Brochure — what this plan offers (shown to clients via a "Details" button)</label><textarea id="plan-brochure" rows="6" placeholder="One paragraph per line — each becomes its own line in the client's view."></textarea></div>
     <div class="error-text" id="plan-error" style="display:none;"></div>
     <button class="btn btn-primary btn-sm" onclick="submitPlan()">Save</button>
   </div>
