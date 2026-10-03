@@ -9,6 +9,20 @@ const adminRoutes = require('./routes/admin');
 const trackerRoutes = require('./routes/tracker');
 const { Plan, Settings } = require('./models');
 
+// Safety net: since Node 15, an unhandled promise rejection crashes the
+// whole process by default. Every route here is meant to catch its own
+// errors, but a single missed `try/catch` anywhere — admin, client,
+// tracker, auth — would otherwise kill the app and Hostinger would show
+// EVERY endpoint as 503 until it restarts, which looks exactly like
+// "nothing loads" even though only one request actually failed. Log and
+// keep running instead.
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled promise rejection (request kept the app alive, but check this):', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception (request kept the app alive, but check this):', err);
+});
+
 const app = express();
 
 app.use(express.json({ limit: '6mb' })); // roomy enough for a base64 payment screenshot

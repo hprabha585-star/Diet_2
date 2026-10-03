@@ -782,3 +782,67 @@
 /* Simple labeled checkbox row, reused in a couple of admin modals */
 .check-line { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
 .check-line input { width: 16px; height: 16px; accent-color: var(--ember); }
+
+/* ============================================================
+   Mobile hardening — narrow phones (≤480px), both dashboards.
+   Several rows below use fixed-px grid columns (meal rows, the
+   roster card's stat cluster, range/move-day controls) that fit fine
+   on a tablet-width phone but overflow a ~360-390px screen. This
+   block switches them to stacked/flexible layouts at that width
+   instead of letting them spill past the edge or force a sideways
+   scroll inside a modal.
+   ============================================================ */
+@media (max-width: 480px) {
+  /* Roster card: name+avatar, then stats, then the "..." menu — all in
+     one row — doesn't fit a narrow phone. Stack it. */
+  .roster-card { flex-wrap: wrap; align-items: flex-start; padding: 14px; }
+  .roster-main { width: 100%; }
+  .roster-stats { width: 100%; justify-content: space-between; gap: 10px; margin-top: 4px; }
+  .roster-menu { position: absolute; top: 14px; right: 14px; }
+  .roster-card { position: relative; }
+
+  /* Assign-plan meal/milestone rows and the day-defaults row: fixed
+     90px/32px columns don't leave enough room for the name/qty inputs
+     once the screen is this narrow. */
+  .meal-row { grid-template-columns: 1fr 1fr; grid-template-areas: "name qty" "cal remove"; row-gap: 6px; }
+  .meal-row > *:nth-child(1) { grid-area: name; }
+  .meal-row > *:nth-child(2) { grid-area: qty; }
+  .meal-row > *:nth-child(3) { grid-area: cal; }
+  .meal-row > *:nth-child(4) { grid-area: remove; justify-self: end; }
+  .milestone-row { grid-template-columns: 1fr auto; }
+  .day-defaults-row select { min-width: 0; }
+  .day-defaults-row { flex-direction: column; align-items: stretch; }
+
+  /* Range/move-day controls: inputs + buttons on one row overflow. */
+  .range-row, .move-day-row { flex-direction: column; align-items: stretch; }
+  .move-day-row input { width: 100%; }
+  .apply-scope-row { flex-direction: column; }
+  .apply-scope-row .btn, .apply-scope-row .btn-primary, .apply-scope-row .btn-outline { width: 100%; }
+
+  /* Tabs row (payments/payouts/referrals pending/approved/rejected):
+     let it scroll horizontally rather than squeeze every label. */
+  .tabs-row { gap: 4px; }
+  .tabs-row button { margin-right: 14px; font-size: 13px; }
+
+  /* Guide editor's fixed 70px day-number column is tight next to a
+     multi-line textarea on a narrow screen. */
+  .guide-editor-row { grid-template-columns: 1fr; gap: 6px; }
+  .guide-editor-row.current-day { margin: 0 -14px; padding: 12px 14px; }
+  .guide-editor-day { padding-top: 0; }
+
+  /* Window split/fasting panels, roster stats, detail cells: shrink
+     type and padding so numbers don't wrap mid-word. */
+  .roster-stat .num { font-size: 16px; }
+  .roster-stats { gap: 16px; }
+  .detail-grid { grid-template-columns: repeat(2, 1fr); }
+  .profile-grid { grid-template-columns: repeat(2, 1fr); }
+
+  /* Chat: composer + send button can get cramped at this width. */
+  .chat-composer { padding: 10px; gap: 8px; }
+  .chat-log { height: 42vh; }
+
+  /* Modal padding + any select that assumed a wider viewport. */
+  .modal { padding: 16px; }
+  .modal select, .field select { max-width: 100%; }
+  .plan-cards { grid-template-columns: 1fr; }
+}

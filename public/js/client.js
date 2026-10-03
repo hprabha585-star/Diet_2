@@ -22,12 +22,27 @@ async function init() {
 
   document.getElementById('topbar-title').textContent = formatTodayHeading();
 
-  await loadDashboard();
-  loadProgress();
-  loadAlerts();
-  loadContact();
-  loadPaymentView();
-  loadReferral();
+  // Each panel loads independently. Previously `loadDashboard()` was a
+  // blocking `await` with no try/catch, so if it failed (a 500/503, or a
+  // not-yet-migrated column) the rest of the page — progress, alerts,
+  // contact, payment status, referral — never even attempted to load,
+  // which is why the whole dashboard could come up blank.
+  await safeLoad(loadDashboard, 'your dashboard');
+  safeLoad(loadProgress, 'your progress');
+  safeLoad(loadAlerts, 'alerts');
+  safeLoad(loadContact, 'contact details');
+  safeLoad(loadPaymentView, 'payment status');
+  safeLoad(loadReferral, 'referral details');
+}
+
+// Runs a loader, logging (not throwing) on failure so one broken panel
+// never blanks out the rest of the dashboard.
+async function safeLoad(fn, label) {
+  try {
+    await fn();
+  } catch (err) {
+    console.error(`Could not load ${label}:`, err);
+  }
 }
 
 // "Today" replaced with the actual date + weekday, e.g. "Saturday, 26 Sep".

@@ -19,18 +19,34 @@ async function init() {
     a.addEventListener('click', (e) => { e.preventDefault(); showView(a.dataset.view); });
   });
 
-  await loadProtocolDefaults();
-  await loadMealPresets();
-  await loadRoster();
-  await loadPlans();
-  loadPayments();
-  loadLeaderboard();
-  loadPayouts();
-  loadReferrals();
-  loadSettings();
-  loadSiteSettings();
-  loadThreads();
+  // Each section loads independently — one endpoint failing (a 500, a
+  // 503 while the server restarts, a not-yet-migrated column) must never
+  // stop the rest of the console from loading. Previously these were
+  // sequential `await`s with no try/catch, so a single failure here left
+  // the WHOLE admin console blank (roster, payments, leaderboard, etc.
+  // never even attempted).
+  await safeLoad(loadProtocolDefaults, 'the 55-day protocol');
+  await safeLoad(loadMealPresets, 'meal presets');
+  await safeLoad(loadRoster, 'the client roster');
+  await safeLoad(loadPlans, 'plans');
+  safeLoad(loadPayments, 'payments');
+  safeLoad(loadLeaderboard, 'the leaderboard');
+  safeLoad(loadPayouts, 'payouts');
+  safeLoad(loadReferrals, 'referrals');
+  safeLoad(loadSettings, 'settings');
+  safeLoad(loadSiteSettings, 'site settings');
+  safeLoad(loadThreads, 'messages');
   chatPoll = setInterval(() => { if (currentThreadClientId) loadThread(currentThreadClientId, true); loadThreads(); }, 15000);
+}
+
+// Runs a loader, logging (not throwing) on failure so one broken section
+// never blanks out the rest of the console.
+async function safeLoad(fn, label) {
+  try {
+    await fn();
+  } catch (err) {
+    console.error(`Could not load ${label}:`, err);
+  }
 }
 
 function showView(view) {

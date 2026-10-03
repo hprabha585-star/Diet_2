@@ -307,3 +307,20 @@
   .cal-hours { display: none; }
   .page-intro h2 { font-size: 21px; }
 }
+
+/* Narrow phones (≤480px) — one column everywhere a grid previously
+   assumed at least a small-tablet width, and compact spacing so cards
+   don't force a sideways scroll. */
+@media (max-width: 480px) {
+  .schedule-grid, .learn-grid { grid-template-columns: 1fr; }
+  .custom-row { grid-template-columns: 1fr; }
+  .tile-grid { grid-template-columns: 1fr; }
+  .water-main { flex-direction: column; align-items: flex-start; }
+  .water-numbers { min-width: 0; width: 100%; }
+  .week-row { grid-template-columns: 1fr; }
+  .week-row select { width: 100%; }
+  .fast-actions .btn, .fast-actions .btn-outline { flex: 1 1 auto; }
+  .modal { padding: 18px; }
+  .range-tabs { width: 100%; }
+  .range-tab { flex: 1; padding: 8px 6px; }
+}

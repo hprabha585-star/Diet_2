@@ -68,17 +68,37 @@ async function init() {
 
   try {
     content = await apiRequest(q('/tracker/content'));
+    await refreshState();
   } catch (err) {
+    // Either the tracker genuinely isn't unlocked on this account (403 —
+    // show the upsell notice), or a request failed for some other reason
+    // (a 500/503 while the server was restarting, a network blip). Either
+    // way, `content`/`state` are still null here — showing the "app" shell
+    // and then crashing the moment someone clicks a nav link (as it used
+    // to) is worse than just saying loading failed and offering a retry.
     document.getElementById('locked-notice').style.display = 'flex';
-    document.getElementById('locked-reason').textContent = err.message;
+    document.getElementById('locked-reason').textContent = err.message +
+      (err.message.includes('separate plan') ? '' : ' — tap Retry to try again.');
+    const retryBtn = document.getElementById('locked-retry');
+    if (retryBtn) { retryBtn.style.display = err.message.includes('separate plan') ? 'none' : 'inline-block'; retryBtn.onclick = init; }
     return;
   }
   document.getElementById('tracker-app').style.display = 'block';
 
-  await refreshState();
-  loadToday();
-  startTicking();
-  if (location.hash) showView(location.hash.slice(1));
+  try {
+    loadToday();
+    startTicking();
+    if (location.hash) showView(location.hash.slice(1));
+  } catch (err) {
+    console.error('Tracker failed to render after loading:', err);
+  }
+}
+
+// True once content/state/profile are all loaded — every render function
+// checks this first so a stale click (or a background refresh that
+// failed) shows a message instead of throwing on a null read.
+function trackerReady() {
+  return !!(content && state && profile);
 }
 
 function showView(view) {
@@ -92,12 +112,33 @@ function showView(view) {
   closeSidebar();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 
+  // If the initial load never finished (a failed request, a slow
+  // connection), state/profile/content are still null — show a retry
+  // message in whatever view the user tapped instead of letting the
+  // loader below crash on a null read.
+  if (!trackerReady()) {
+    document.getElementById(`view-${view}`).innerHTML =
+      `<div class="card empty-state"><h3>Couldn't load this page</h3>
+       <p>Something didn't load correctly. Check your connection and try again.</p>
+       <button class="btn btn-primary btn-sm" onclick="init()">Retry</button></div>`;
+    return;
+  }
+
   const loaders = {
     today: loadToday, fast: renderFastPage, schedule: loadSchedulePage, history: loadHistory,
     stats: loadStats, calendar: loadCalendar, nutrition: loadNutrition, water: loadWater,
     stages: renderStages, learn: renderLearn, tasks: loadTasks, settings: renderSettings
   };
-  if (loaders[view]) loaders[view]();
+  if (loaders[view]) {
+    try {
+      const result = loaders[view]();
+      if (result && typeof result.catch === 'function') {
+        result.catch(err => console.error(`Could not load the ${view} view:`, err));
+      }
+    } catch (err) {
+      console.error(`Could not render the ${view} view:`, err);
+    }
+  }
 }
 
 async function refreshState() {

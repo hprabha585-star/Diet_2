@@ -63,7 +63,10 @@
         <div>
           <strong>The Fasting Tracker isn't unlocked on your account.</strong>
           <p id="locked-reason">Pick up the Fasting Tracker plan from the Payment page to use this section.</p>
-          <a class="btn btn-primary btn-sm" href="/client/dashboard.html#payment" style="margin-top:10px;">Go to Payment</a>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
+            <a class="btn btn-primary btn-sm" href="/client/dashboard.html#payment">Go to Payment</a>
+            <button class="btn btn-outline btn-sm" id="locked-retry" style="display:none;" onclick="init()">Retry</button>
+          </div>
         </div>
       </div>
 

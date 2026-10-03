@@ -164,12 +164,22 @@ router.post('/clients/:id/pause', async (req, res) => {
 router.get('/protocol-defaults', async (req, res) => {
   try {
     const days = await ProtocolDay.getAllOrSeed();
-    const settings = await Settings.getOrCreate();
-    res.json({
-      days,
-      phaseGoals: settings.protocolPhaseGoals || PHASE_GOALS,
-      safetyNotes: settings.protocolSafetyNotes || SAFETY_NOTES
-    });
+    // settings.protocolPhaseGoals/protocolSafetyNotes are read separately
+    // and defensively: on a server whose `npm run migrate` hasn't been
+    // re-run since these columns were added, SELECT-ing them throws
+    // "Unknown column" and used to take this whole page down with a 500.
+    // Falling back to the static defaults keeps the page usable either
+    // way — it just means edits made on the 55-day protocol page won't
+    // persist until the migration actually runs.
+    let phaseGoals = PHASE_GOALS, safetyNotes = SAFETY_NOTES;
+    try {
+      const settings = await Settings.getOrCreate();
+      phaseGoals = settings.protocolPhaseGoals || PHASE_GOALS;
+      safetyNotes = settings.protocolSafetyNotes || SAFETY_NOTES;
+    } catch (settingsErr) {
+      console.error('Settings.protocolPhaseGoals/protocolSafetyNotes unavailable (run `npm run migrate`):', settingsErr.message);
+    }
+    res.json({ days, phaseGoals, safetyNotes });
   } catch (err) {
     res.status(500).json({ error: 'Could not load the 55-day protocol', detail: err.message });
   }
@@ -220,7 +230,8 @@ router.put('/protocol-defaults/phase-info', async (req, res) => {
     await settings.save();
     res.json({ phaseGoals: settings.protocolPhaseGoals, safetyNotes: settings.protocolSafetyNotes });
   } catch (err) {
-    res.status(500).json({ error: 'Could not save phase info', detail: err.message });
+    const hint = /unknown column/i.test(err.message) ? ' — run `npm run migrate` on the server, then retry.' : '';
+    res.status(500).json({ error: 'Could not save phase info', detail: err.message + hint });
   }
 });
 
