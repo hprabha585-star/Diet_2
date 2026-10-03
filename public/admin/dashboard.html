@@ -153,12 +153,21 @@
 
       <!-- CHAT -->
       <div class="view" id="view-chat">
-        <div style="display:grid;grid-template-columns:260px 1fr;gap:16px;">
-          <div class="card" id="chat-threads" style="max-height:520px;overflow-y:auto;"></div>
-          <div class="card">
+        <div class="chat-layout">
+          <div class="card" style="padding:10px;">
+            <div class="field" style="margin-bottom:10px;">
+              <label>Message a client</label>
+              <select id="chat-new-client" onchange="startNewThread(this.value)">
+                <option value="">Pick a client to start or open a conversation…</option>
+              </select>
+            </div>
+            <div id="chat-threads" style="max-height:460px;overflow-y:auto;"></div>
+          </div>
+          <div class="card chat-shell" style="padding:16px;display:flex;flex-direction:column;">
+            <div id="chat-thread-empty" class="hint" style="padding:40px 10px;text-align:center;">Pick a client on the left to see or start a conversation.</div>
             <div id="chat-thread" style="max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;"></div>
-            <div style="display:flex;gap:8px;margin-top:14px;">
-              <input type="text" id="chat-input" placeholder="Type a message…" style="flex:1;padding:11px 13px;border:1px solid var(--line);border-radius:var(--radius-sm);">
+            <div id="chat-composer-row" style="display:none;gap:8px;margin-top:14px;">
+              <input type="text" id="chat-input" placeholder="Type a message…" style="flex:1;padding:11px 13px;border:1px solid var(--line);border-radius:var(--radius-sm);" onkeydown="if(event.key==='Enter'){event.preventDefault();sendAdminMessage();}">
               <button class="btn btn-primary btn-sm" onclick="sendAdminMessage()">Send</button>
             </div>
           </div>

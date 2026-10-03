@@ -19,23 +19,27 @@ async function init() {
     a.addEventListener('click', (e) => { e.preventDefault(); showView(a.dataset.view); });
   });
 
-  // Each section loads independently — one endpoint failing (a 500, a
-  // 503 while the server restarts, a not-yet-migrated column) must never
-  // stop the rest of the console from loading. Previously these were
-  // sequential `await`s with no try/catch, so a single failure here left
-  // the WHOLE admin console blank (roster, payments, leaderboard, etc.
-  // never even attempted).
-  await safeLoad(loadProtocolDefaults, 'the 55-day protocol');
-  await safeLoad(loadMealPresets, 'meal presets');
-  await safeLoad(loadRoster, 'the client roster');
-  await safeLoad(loadPlans, 'plans');
-  safeLoad(loadPayments, 'payments');
-  safeLoad(loadLeaderboard, 'the leaderboard');
-  safeLoad(loadPayouts, 'payouts');
-  safeLoad(loadReferrals, 'referrals');
-  safeLoad(loadSettings, 'settings');
-  safeLoad(loadSiteSettings, 'site settings');
-  safeLoad(loadThreads, 'messages');
+  // Every section loads independently AND concurrently. Two separate
+  // problems used to make the console painful: (1) these were sequential
+  // `await`s with no try/catch, so one failing endpoint stopped every
+  // later one from even being attempted; (2) even after that was fixed to
+  // not block, they still ran one after another — ten-plus round trips
+  // end to end — which is what made the console feel slow to load.
+  // Firing them all at once cuts load time to roughly the slowest single
+  // request instead of the sum of all of them.
+  await Promise.all([
+    safeLoad(loadProtocolDefaults, 'the 55-day protocol'),
+    safeLoad(loadMealPresets, 'meal presets'),
+    safeLoad(loadRoster, 'the client roster'),
+    safeLoad(loadPlans, 'plans'),
+    safeLoad(loadPayments, 'payments'),
+    safeLoad(loadLeaderboard, 'the leaderboard'),
+    safeLoad(loadPayouts, 'payouts'),
+    safeLoad(loadReferrals, 'referrals'),
+    safeLoad(loadSettings, 'settings'),
+    safeLoad(loadSiteSettings, 'site settings'),
+    safeLoad(loadThreads, 'messages')
+  ]);
   chatPoll = setInterval(() => { if (currentThreadClientId) loadThread(currentThreadClientId, true); loadThreads(); }, 15000);
 }
 
@@ -66,10 +70,16 @@ function closeModal(id) { document.getElementById(id).classList.remove('open'); 
 /* Roster — clean cards, one menu instead of five buttons               */
 /* ------------------------------------------------------------------ */
 async function loadRoster() {
-  const data = await apiRequest('/admin/clients');
-  roster = data.clients;
-  renderRoster();
-  renderProgramGuidePicker();
+  try {
+    const data = await apiRequest('/admin/clients');
+    roster = data.clients;
+    renderRoster();
+    renderProgramGuidePicker();
+    populateChatClientPicker();
+  } catch (err) {
+    document.getElementById('roster-list').innerHTML = errorBlock('the client roster', 'loadRoster()');
+    throw err;
+  }
 }
 
 function renderRoster() {
@@ -221,12 +231,18 @@ async function submitAdminPause() {
 /* actually see.                                                        */
 /* ------------------------------------------------------------------ */
 async function loadProtocolDefaults() {
-  const data = await apiRequest('/admin/protocol-defaults');
-  protocolDefaults = data.days;
-  const preset = document.getElementById('assign-day-preset');
-  preset.innerHTML = '<option value="">Pick a 55-day default to pre-fill…</option>' +
-    protocolDefaults.map(d => `<option value="${d.day}">Day ${d.day} — ${esc(d.label || d.phase)}</option>`).join('');
-  renderProtocol55Page(data);
+  try {
+    const data = await apiRequest('/admin/protocol-defaults');
+    protocolDefaults = data.days;
+    const preset = document.getElementById('assign-day-preset');
+    preset.innerHTML = '<option value="">Pick a 55-day default to pre-fill…</option>' +
+      protocolDefaults.map(d => `<option value="${d.day}">Day ${d.day} — ${esc(d.label || d.phase)}</option>`).join('');
+    renderProtocol55Page(data);
+  } catch (err) {
+    const listEl = document.getElementById('protocol55-list');
+    if (listEl) listEl.innerHTML = errorBlock('the 55-day protocol', 'loadProtocolDefaults()');
+    throw err;
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -791,6 +807,7 @@ function setPaymentTab(status) {
   loadPayments();
 }
 async function loadPayments() {
+  try {
   const data = await apiRequest(`/admin/payments?status=${paymentTab}`);
   document.getElementById('payments-body').innerHTML = data.payments.length ? data.payments.map(p => `
     <tr>
@@ -805,6 +822,10 @@ async function loadPayments() {
           <button class="btn btn-outline btn-sm" onclick="rejectPayment(${p.id})">Reject</button>` : `<span class="badge badge-${p.status === 'approved' ? 'active' : 'rejected'}">${p.status}</span>`}
       </td>
     </tr>`).join('') : `<tr><td colspan="6" class="muted">No ${esc(paymentTab)} payments.</td></tr>`;
+  } catch (err) {
+    document.getElementById('payments-body').innerHTML = errorRow(6, 'payments', 'loadPayments()');
+    throw err;
+  }
 }
 async function approvePayment(id) {
   try { await apiRequest(`/admin/payments/${id}/approve`, { method: 'POST' }); await loadPayments(); await loadRoster(); }
@@ -820,10 +841,15 @@ async function rejectPayment(id) {
 /* Leaderboard                                                           */
 /* ------------------------------------------------------------------ */
 async function loadLeaderboard() {
-  const data = await apiRequest('/admin/leaderboard');
-  document.getElementById('leaderboard-body').innerHTML = data.leaderboard.map((c, i) => `
-    <tr><td>${i + 1}</td><td>${esc(c.name)}</td><td>${c.points}</td><td>${c.streakCurrent}</td><td>${c.streakBest}</td></tr>
-  `).join('') || '<tr><td colspan="5" class="muted">No coached clients yet.</td></tr>';
+  try {
+    const data = await apiRequest('/admin/leaderboard');
+    document.getElementById('leaderboard-body').innerHTML = data.leaderboard.map((c, i) => `
+      <tr><td>${i + 1}</td><td>${esc(c.name)}</td><td>${c.points}</td><td>${c.streakCurrent}</td><td>${c.streakBest}</td></tr>
+    `).join('') || '<tr><td colspan="5" class="muted">No coached clients yet.</td></tr>';
+  } catch (err) {
+    document.getElementById('leaderboard-body').innerHTML = errorRow(5, 'the leaderboard', 'loadLeaderboard()');
+    throw err;
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -835,6 +861,7 @@ function setPayoutTab(status) {
   loadPayouts();
 }
 async function loadPayouts() {
+  try {
   const data = await apiRequest(`/admin/payouts?status=${payoutTab}`);
   document.getElementById('payouts-body').innerHTML = data.payouts.length ? data.payouts.map(p => `
     <tr>
@@ -844,6 +871,10 @@ async function loadPayouts() {
         <button class="btn btn-primary btn-sm" onclick="approvePayout(${p.id})">Mark paid</button>
         <button class="btn btn-outline btn-sm" onclick="rejectPayout(${p.id})">Reject</button>` : `<span class="badge badge-${p.status === 'paid' ? 'active' : 'rejected'}">${p.status}</span>`}</td>
     </tr>`).join('') : `<tr><td colspan="5" class="muted">No ${esc(payoutTab)} payouts.</td></tr>`;
+  } catch (err) {
+    document.getElementById('payouts-body').innerHTML = errorRow(5, 'payouts', 'loadPayouts()');
+    throw err;
+  }
 }
 async function approvePayout(id) {
   try { await apiRequest(`/admin/payouts/${id}/approve`, { method: 'POST' }); await loadPayouts(); }
@@ -858,16 +889,21 @@ async function rejectPayout(id) {
 /* Referral overview                                                     */
 /* ------------------------------------------------------------------ */
 async function loadReferrals() {
-  const data = await apiRequest('/admin/referrals');
-  document.getElementById('referrals-body').innerHTML = data.overview.map(r => `
-    <tr>
-      <td>${esc(r.name)}<br><span class="hint">${esc(r.email)}</span></td>
-      <td>${esc(r.referralCode)}</td>
-      <td>${esc(r.referredByName || '—')}</td>
-      <td>${r.referredCount}</td>
-      <td>₹${r.walletBalanceInr}</td>
-      <td><button class="btn btn-outline btn-sm" onclick="adjustWallet(${r.id})">Adjust</button></td>
-    </tr>`).join('');
+  try {
+    const data = await apiRequest('/admin/referrals');
+    document.getElementById('referrals-body').innerHTML = data.overview.length ? data.overview.map(r => `
+      <tr>
+        <td>${esc(r.name)}<br><span class="hint">${esc(r.email)}</span></td>
+        <td>${esc(r.referralCode)}</td>
+        <td>${esc(r.referredByName || '—')}</td>
+        <td>${r.referredCount}</td>
+        <td>₹${r.walletBalanceInr}</td>
+        <td><button class="btn btn-outline btn-sm" onclick="adjustWallet(${r.id})">Adjust</button></td>
+      </tr>`).join('') : '<tr><td colspan="6" class="muted">No clients yet.</td></tr>';
+  } catch (err) {
+    document.getElementById('referrals-body').innerHTML = errorRow(6, 'referrals', 'loadReferrals()');
+    throw err;
+  }
 }
 async function adjustWallet(id) {
   const deltaInr = parseInt(prompt('Adjustment amount (₹, use a negative number to deduct)'), 10);
@@ -881,6 +917,7 @@ async function adjustWallet(id) {
 /* Tracker plans here; both show up on the landing page and payment page.*/
 /* ------------------------------------------------------------------ */
 async function loadPlans() {
+  try {
   const data = await apiRequest('/admin/plans');
   plansCache = data.plans;
   document.getElementById('plans-list').innerHTML = plansCache.map(p => `
@@ -896,6 +933,10 @@ async function loadPlans() {
         <button class="btn-ghost btn-sm" onclick="deletePlan(${p.id})">Delete</button>
       </div>
     </div>`).join('');
+  } catch (err) {
+    document.getElementById('plans-list').innerHTML = errorBlock('plans', 'loadPlans()');
+    throw err;
+  }
 }
 function openPlanModal(plan) {
   document.getElementById('plan-modal-title').textContent = plan ? 'Edit plan' : 'New plan';
@@ -971,27 +1012,64 @@ async function sendAlert() {
 /* ------------------------------------------------------------------ */
 /* Chat                                                                  */
 /* ------------------------------------------------------------------ */
+let threadsCache = [];
+
 async function loadThreads() {
-  const data = await apiRequest('/admin/messages/threads');
-  const totalUnread = data.threads.reduce((s, t) => s + t.unread, 0);
-  const badge = document.getElementById('badge-chat');
-  badge.hidden = totalUnread === 0;
-  badge.textContent = totalUnread;
-  document.getElementById('chat-threads').innerHTML = data.threads.map(t => `
-    <div class="checklist-row" style="cursor:pointer;${currentThreadClientId === t.clientId ? 'border-color:var(--ink);' : ''}" onclick="loadThread(${t.clientId})">
-      <div><strong>${esc(t.name)}</strong><br><span class="hint">${esc((t.lastMessage.body || '').slice(0, 40))}</span></div>
-      ${t.unread ? `<span class="badge badge-pending">${t.unread}</span>` : ''}
-    </div>`).join('') || '<p class="hint">No conversations yet.</p>';
+  try {
+    const data = await apiRequest('/admin/messages/threads');
+    threadsCache = data.threads;
+    const totalUnread = data.threads.reduce((s, t) => s + t.unread, 0);
+    const badge = document.getElementById('badge-chat');
+    badge.hidden = totalUnread === 0;
+    badge.textContent = totalUnread;
+    document.getElementById('chat-threads').innerHTML = data.threads.map(t => `
+      <div class="checklist-row" style="cursor:pointer;${currentThreadClientId === t.clientId ? 'border-color:var(--ink);' : ''}" onclick="loadThread(${t.clientId})">
+        <div><strong>${esc(t.name)}</strong><br><span class="hint">${esc((t.lastMessage.body || '').slice(0, 40))}</span></div>
+        ${t.unread ? `<span class="badge badge-pending">${t.unread}</span>` : ''}
+      </div>`).join('') || '<p class="hint">No conversations yet. Use "Message a client" above to start one.</p>';
+    populateChatClientPicker();
+  } catch (err) {
+    document.getElementById('chat-threads').innerHTML = errorBlock('conversations', 'loadThreads()');
+    throw err;
+  }
+}
+
+// The client list above only ever showed people who had ALREADY messaged
+// the coach — there was no way to start a conversation with someone who
+// hadn't. This dropdown lists every client in the roster (existing
+// threads get their unread count shown too), and picking one opens —
+// or starts — that conversation.
+function populateChatClientPicker() {
+  const select = document.getElementById('chat-new-client');
+  if (!select || !roster.length) return;
+  const unreadByClient = {};
+  threadsCache.forEach(t => { unreadByClient[t.clientId] = t.unread; });
+  const current = select.value;
+  select.innerHTML = '<option value="">Pick a client to start or open a conversation…</option>' +
+    roster.map(c => `<option value="${c.id}">${esc(c.name)}${unreadByClient[c.id] ? ` (${unreadByClient[c.id]} unread)` : ''}</option>`).join('');
+  select.value = current;
+}
+function startNewThread(clientId) {
+  if (!clientId) return;
+  loadThread(parseInt(clientId, 10));
 }
 async function loadThread(clientId, silent) {
   currentThreadClientId = clientId;
-  const data = await apiRequest(`/admin/messages/${clientId}`);
-  document.getElementById('chat-thread').innerHTML = data.messages.map(m => `
-    <div style="align-self:${m.sender === 'admin' ? 'flex-end' : 'flex-start'};background:${m.sender === 'admin' ? 'var(--ink)' : 'var(--paper)'};color:${m.sender === 'admin' ? '#fff' : 'var(--ink)'};padding:8px 12px;border-radius:10px;max-width:80%;font-size:14px;">
-      ${esc(m.body)}
-    </div>`).join('');
-  if (!silent) document.getElementById('chat-thread').scrollTop = 999999;
-  if (!silent) loadThreads();
+  const select = document.getElementById('chat-new-client');
+  if (select) select.value = clientId;
+  document.getElementById('chat-thread-empty').style.display = 'none';
+  document.getElementById('chat-composer-row').style.display = 'flex';
+  try {
+    const data = await apiRequest(`/admin/messages/${clientId}`);
+    document.getElementById('chat-thread').innerHTML = data.messages.length ? data.messages.map(m => `
+      <div style="align-self:${m.sender === 'admin' ? 'flex-end' : 'flex-start'};background:${m.sender === 'admin' ? 'var(--ink)' : 'var(--paper)'};color:${m.sender === 'admin' ? '#fff' : 'var(--ink)'};padding:8px 12px;border-radius:10px;max-width:80%;font-size:14px;">
+        ${esc(m.body)}
+      </div>`).join('') : '<p class="hint">No messages yet — say hello below.</p>';
+    if (!silent) document.getElementById('chat-thread').scrollTop = 999999;
+    if (!silent) loadThreads();
+  } catch (err) {
+    document.getElementById('chat-thread').innerHTML = errorBlock('this conversation', `loadThread(${clientId})`);
+  }
 }
 async function sendAdminMessage() {
   const input = document.getElementById('chat-input');
@@ -1007,6 +1085,7 @@ async function sendAdminMessage() {
 /* Contact / settings                                                    */
 /* ------------------------------------------------------------------ */
 async function loadSettings() {
+  try {
   const data = await apiRequest('/admin/settings');
   const s = data.settings;
   document.getElementById('settings-card').innerHTML = `
@@ -1019,6 +1098,10 @@ async function loadSettings() {
     <div class="field"><label>Support hours</label><input type="text" id="set-supportHours" value="${esc(s.supportHours)}"></div>
     <div class="field"><label>Note</label><textarea id="set-note" rows="3">${esc(s.note)}</textarea></div>
     <button class="btn btn-primary btn-sm" onclick="saveSettings()">Save</button>`;
+  } catch (err) {
+    document.getElementById('settings-card').innerHTML = errorBlock('settings', 'loadSettings()');
+    throw err;
+  }
 }
 async function saveSettings() {
   const fields = ['coachName', 'phone', 'whatsapp', 'email', 'upiId', 'address', 'supportHours', 'note'];

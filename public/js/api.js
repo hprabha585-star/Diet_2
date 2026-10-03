@@ -53,6 +53,21 @@ function logout() {
   window.location.href = '/index.html';
 }
 
+// A failed section used to stay stuck on its "Loading…" placeholder
+// forever — the fetch failed, the error was logged to the console, and
+// nothing told the person looking at the screen. These two render a
+// visible "couldn't load, try again" message with a working Retry
+// button instead, so a slow/failed request is obvious and recoverable
+// rather than looking like the page is still thinking.
+function errorBlock(message, retryFnCall) {
+  return `<p class="hint error-text">Couldn't load ${esc(message)}.
+    <button class="btn-ghost btn-sm" onclick="${retryFnCall}">Retry</button></p>`;
+}
+function errorRow(colspan, message, retryFnCall) {
+  return `<tr><td colspan="${colspan}" class="muted">Couldn't load ${esc(message)}.
+    <button class="btn-ghost btn-sm" onclick="${retryFnCall}">Retry</button></td></tr>`;
+}
+
 function esc(str) {
   return String(str == null ? '' : str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }

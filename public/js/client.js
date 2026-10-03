@@ -22,17 +22,18 @@ async function init() {
 
   document.getElementById('topbar-title').textContent = formatTodayHeading();
 
-  // Each panel loads independently. Previously `loadDashboard()` was a
-  // blocking `await` with no try/catch, so if it failed (a 500/503, or a
-  // not-yet-migrated column) the rest of the page — progress, alerts,
-  // contact, payment status, referral — never even attempted to load,
-  // which is why the whole dashboard could come up blank.
-  await safeLoad(loadDashboard, 'your dashboard');
-  safeLoad(loadProgress, 'your progress');
-  safeLoad(loadAlerts, 'alerts');
-  safeLoad(loadContact, 'contact details');
-  safeLoad(loadPaymentView, 'payment status');
-  safeLoad(loadReferral, 'referral details');
+  // Every panel loads independently AND concurrently. Loading them one
+  // after another (even with each one safe to fail) still adds up to
+  // several round trips in a row before the page feels usable — firing
+  // them all at once cuts that to roughly the slowest single request.
+  await Promise.all([
+    safeLoad(loadDashboard, 'your dashboard'),
+    safeLoad(loadProgress, 'your progress'),
+    safeLoad(loadAlerts, 'alerts'),
+    safeLoad(loadContact, 'contact details'),
+    safeLoad(loadPaymentView, 'payment status'),
+    safeLoad(loadReferral, 'referral details')
+  ]);
 }
 
 // Runs a loader, logging (not throwing) on failure so one broken panel
@@ -839,16 +840,21 @@ async function requestPayout() {
 /* Contact us                                                            */
 /* ------------------------------------------------------------------ */
 async function loadContact() {
-  const data = await apiRequest('/client/contact', { auth: true });
-  const s = data.settings;
-  document.getElementById('contact-card').innerHTML = `
-    <p><strong>${esc(s.coachName || 'Your coach')}</strong></p>
-    <p style="margin-top:10px;">${s.phone ? `<a href="tel:${esc(s.phone)}" class="btn btn-outline btn-sm">Call ${esc(s.phone)}</a>` : ''}
-    ${s.whatsapp ? `<a href="https://wa.me/${esc(s.whatsapp.replace(/\D/g, ''))}" class="btn btn-primary btn-sm" style="margin-left:8px;">WhatsApp</a>` : ''}</p>
-    <p style="margin-top:14px;font-size:14px;">${esc(s.email || '')}</p>
-    <p style="margin-top:6px;font-size:14px;">${esc(s.address || '')}</p>
-    <p style="margin-top:6px;font-size:14px;">Support hours: ${esc(s.supportHours || '')}</p>
-    <p style="margin-top:10px;font-size:14px;">${esc(s.note || '')}</p>`;
+  try {
+    const data = await apiRequest('/client/contact', { auth: true });
+    const s = data.settings;
+    document.getElementById('contact-card').innerHTML = `
+      <p><strong>${esc(s.coachName || 'Your coach')}</strong></p>
+      <p style="margin-top:10px;">${s.phone ? `<a href="tel:${esc(s.phone)}" class="btn btn-outline btn-sm">Call ${esc(s.phone)}</a>` : ''}
+      ${s.whatsapp ? `<a href="https://wa.me/${esc(s.whatsapp.replace(/\D/g, ''))}" class="btn btn-primary btn-sm" style="margin-left:8px;">WhatsApp</a>` : ''}</p>
+      <p style="margin-top:14px;font-size:14px;">${esc(s.email || '')}</p>
+      <p style="margin-top:6px;font-size:14px;">${esc(s.address || '')}</p>
+      <p style="margin-top:6px;font-size:14px;">Support hours: ${esc(s.supportHours || '')}</p>
+      <p style="margin-top:10px;font-size:14px;">${esc(s.note || '')}</p>`;
+  } catch (err) {
+    document.getElementById('contact-card').innerHTML = errorBlock('contact details', 'loadContact()');
+    throw err;
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -857,29 +863,34 @@ async function loadContact() {
 let paymentPlansCache = [];
 
 async function loadPaymentView() {
-  const [plansData, statusData] = await Promise.all([
-    apiRequest('/client/plans', { auth: true }),
-    apiRequest('/client/payment-status')
-  ]);
-  paymentPlansCache = plansData.plans;
-  const last = statusData.lastPayment;
-  const statusHtml = last ? `<div class="card" style="margin-bottom:16px;">
-      <span class="badge badge-${last.status === 'approved' ? 'active' : last.status === 'rejected' ? 'rejected' : 'pending'}">${esc(last.status)}</span>
-      <span class="small muted" style="margin-left:8px;">${esc(last.planName)} — ₹${last.amountInr} — UTR ${esc(last.utr)}</span>
-    </div>` : '';
+  try {
+    const [plansData, statusData] = await Promise.all([
+      apiRequest('/client/plans', { auth: true }),
+      apiRequest('/client/payment-status')
+    ]);
+    paymentPlansCache = plansData.plans;
+    const last = statusData.lastPayment;
+    const statusHtml = last ? `<div class="card" style="margin-bottom:16px;">
+        <span class="badge badge-${last.status === 'approved' ? 'active' : last.status === 'rejected' ? 'rejected' : 'pending'}">${esc(last.status)}</span>
+        <span class="small muted" style="margin-left:8px;">${esc(last.planName)} — ₹${last.amountInr} — UTR ${esc(last.utr)}</span>
+      </div>` : '';
 
-  document.getElementById('payment-card').innerHTML = `
-    ${statusHtml}
-    <div class="field"><label>Plan</label>
-      <div style="display:flex;gap:8px;">
-        <select id="pay-plan" style="flex:1;" onchange="syncPlanDetailsButton()">${plansData.plans.map(p => `<option value="${p.key}">${esc(p.name)} — ₹${p.priceInr} (${p.mode === 'tracker' ? 'self-guided' : 'coached'})</option>`).join('')}</select>
-        <button class="btn btn-outline btn-sm" id="pay-plan-details-btn" onclick="openPlanDetails()" hidden>Details</button>
+    document.getElementById('payment-card').innerHTML = `
+      ${statusHtml}
+      <div class="field"><label>Plan</label>
+        <div style="display:flex;gap:8px;">
+          <select id="pay-plan" style="flex:1;" onchange="syncPlanDetailsButton()">${plansData.plans.map(p => `<option value="${p.key}">${esc(p.name)} — ₹${p.priceInr} (${p.mode === 'tracker' ? 'self-guided' : 'coached'})</option>`).join('')}</select>
+          <button class="btn btn-outline btn-sm" id="pay-plan-details-btn" onclick="openPlanDetails()" hidden>Details</button>
+        </div>
       </div>
-    </div>
-    <div class="field"><label>UTR / UPI reference number</label><input type="text" id="pay-utr"></div>
-    <div class="error-text" id="pay-error" style="display:none;"></div>
-    <button class="btn btn-primary btn-sm" onclick="submitPayment()">Submit payment</button>`;
-  syncPlanDetailsButton();
+      <div class="field"><label>UTR / UPI reference number</label><input type="text" id="pay-utr"></div>
+      <div class="error-text" id="pay-error" style="display:none;"></div>
+      <button class="btn btn-primary btn-sm" onclick="submitPayment()">Submit payment</button>`;
+    syncPlanDetailsButton();
+  } catch (err) {
+    document.getElementById('payment-card').innerHTML = errorBlock('payment details', 'loadPaymentView()');
+    throw err;
+  }
 }
 
 function syncPlanDetailsButton() {
