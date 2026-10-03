@@ -9,11 +9,21 @@
   width: 236px; flex-shrink: 0; background: var(--ink); color: var(--paper);
   padding: 26px 16px 20px; display: flex; flex-direction: column;
   position: sticky; top: 0; height: 100vh; z-index: 40;
+  /* The whole sidebar scrolls as one unit now (see .sidebar nav below) so
+     Log out sits right after the last nav link on a short list, and the
+     list + Log out scroll together if it's ever long enough not to fit. */
+  overflow-y: auto;
 }
 .sidebar-top { padding: 0 8px; }
 .sidebar .brand { font-family: var(--font-display); font-size: 20px; margin-bottom: 4px; }
 .sidebar .role-tag { font-size: 12px; color: #9BAA9F; margin-bottom: 30px; }
-.sidebar nav { display: flex; flex-direction: column; gap: 2px; flex: 1; overflow-y: auto; }
+/* flex:1 used to stretch nav to fill the sidebar, which is exactly what
+   pushed Log out all the way to the bottom of the viewport regardless of
+   how many links came before it. Letting nav take only its own content
+   height puts sidebar-foot (Log out) directly underneath the last link;
+   the sidebar itself (see .sidebar above) scrolls if that's ever taller
+   than the screen. */
+.sidebar nav { display: flex; flex-direction: column; gap: 2px; flex: 0 0 auto; }
 .sidebar nav a {
   display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 6px;
   text-decoration: none; font-size: 14.5px; color: #C9D0C7; font-weight: 500;

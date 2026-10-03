@@ -27,19 +27,19 @@ async function init() {
   // end to end — which is what made the console feel slow to load.
   // Firing them all at once cuts load time to roughly the slowest single
   // request instead of the sum of all of them.
-  await Promise.all([
-    safeLoad(loadProtocolDefaults, 'the 55-day protocol'),
-    safeLoad(loadMealPresets, 'meal presets'),
-    safeLoad(loadRoster, 'the client roster'),
-    safeLoad(loadPlans, 'plans'),
-    safeLoad(loadPayments, 'payments'),
-    safeLoad(loadLeaderboard, 'the leaderboard'),
-    safeLoad(loadPayouts, 'payouts'),
-    safeLoad(loadReferrals, 'referrals'),
-    safeLoad(loadSettings, 'settings'),
-    safeLoad(loadSiteSettings, 'site settings'),
-    safeLoad(loadThreads, 'messages')
-  ]);
+  await runInBatches([
+    () => safeLoad(loadProtocolDefaults, 'the 55-day protocol'),
+    () => safeLoad(loadMealPresets, 'meal presets'),
+    () => safeLoad(loadRoster, 'the client roster'),
+    () => safeLoad(loadPlans, 'plans'),
+    () => safeLoad(loadPayments, 'payments'),
+    () => safeLoad(loadLeaderboard, 'the leaderboard'),
+    () => safeLoad(loadPayouts, 'payouts'),
+    () => safeLoad(loadReferrals, 'referrals'),
+    () => safeLoad(loadSettings, 'settings'),
+    () => safeLoad(loadSiteSettings, 'site settings'),
+    () => safeLoad(loadThreads, 'messages')
+  ], 4);
   chatPoll = setInterval(() => { if (currentThreadClientId) loadThread(currentThreadClientId, true); loadThreads(); }, 15000);
 }
 

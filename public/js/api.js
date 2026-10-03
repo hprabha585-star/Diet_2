@@ -68,6 +68,19 @@ function errorRow(colspan, message, retryFnCall) {
     <button class="btn-ghost btn-sm" onclick="${retryFnCall}">Retry</button></td></tr>`;
 }
 
+// Runs promise-returning functions with only `size` running at once.
+// A dashboard with 10+ independent panels firing all at once looks fast
+// in principle, but shared hosting usually caps MySQL at a handful of
+// simultaneous connections — fire them all together and the extras just
+// sit queued waiting for a free one, which looks exactly like "stuck
+// loading" even though nothing is actually broken. Small batches keep
+// most of the speed win without overrunning that limit.
+async function runInBatches(fns, size = 4) {
+  for (let i = 0; i < fns.length; i += size) {
+    await Promise.all(fns.slice(i, i + size).map(fn => fn()));
+  }
+}
+
 function esc(str) {
   return String(str == null ? '' : str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }

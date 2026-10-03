@@ -110,13 +110,19 @@ const PORT = process.env.PORT || 5000;
 
 connectDB().then(async () => {
   try {
-    // sync() creates any table that doesn't exist yet — safe to run on
-    // every boot. Logged explicitly here so a failure shows up in
-    // Hostinger's Runtime logs instead of failing silently.
-    await sequelize.sync();
-    console.log('Database tables verified/created.');
+    // { alter: true } creates any missing table AND adds any column a
+    // model has defined but the live table doesn't — not just on first
+    // boot, but every restart. Plain sync() only ever did the first part,
+    // so a model change (like Settings.protocolPhaseGoals) needed
+    // `npm run migrate` run by hand afterwards. On Hostinger's shared
+    // Node hosting that's often not even possible without SSH, which is
+    // exactly what kept causing "Unknown column" 500s here after every
+    // update. Running the safe, additive migration on every boot means
+    // uploading new files and restarting the app is enough on its own.
+    await sequelize.sync({ alter: true });
+    console.log('Database tables verified/created/updated.');
   } catch (err) {
-    console.error('sequelize.sync() failed — tables were NOT created:', err.message);
+    console.error('sequelize.sync({ alter: true }) failed — tables were NOT fully updated:', err.message);
   }
   app.listen(PORT, () => console.log(`FastCoach API running on port ${PORT}`));
 });

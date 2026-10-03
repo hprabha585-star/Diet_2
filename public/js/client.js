@@ -26,14 +26,14 @@ async function init() {
   // after another (even with each one safe to fail) still adds up to
   // several round trips in a row before the page feels usable — firing
   // them all at once cuts that to roughly the slowest single request.
-  await Promise.all([
-    safeLoad(loadDashboard, 'your dashboard'),
-    safeLoad(loadProgress, 'your progress'),
-    safeLoad(loadAlerts, 'alerts'),
-    safeLoad(loadContact, 'contact details'),
-    safeLoad(loadPaymentView, 'payment status'),
-    safeLoad(loadReferral, 'referral details')
-  ]);
+  await runInBatches([
+    () => safeLoad(loadDashboard, 'your dashboard'),
+    () => safeLoad(loadProgress, 'your progress'),
+    () => safeLoad(loadAlerts, 'alerts'),
+    () => safeLoad(loadContact, 'contact details'),
+    () => safeLoad(loadPaymentView, 'payment status'),
+    () => safeLoad(loadReferral, 'referral details')
+  ], 3);
 }
 
 // Runs a loader, logging (not throwing) on failure so one broken panel
@@ -72,6 +72,7 @@ function showView(view) {
   if (view === 'history') loadHistoryPage();
   if (view === 'guide') loadProgramGuide();
   if (view === 'leaderboard') loadClientLeaderboard();
+  if (view === 'alerts') markAlertsRead();
 }
 
 /* ------------------------------------------------------------------ */
@@ -743,9 +744,12 @@ async function deleteWeight(id) {
 /* ------------------------------------------------------------------ */
 /* Alerts                                                                */
 /* ------------------------------------------------------------------ */
+let alertsCache = [];
+
 async function loadAlerts() {
   try {
     const data = await apiRequest('/client/alerts');
+    alertsCache = data.alerts;
     const badge = document.getElementById('badge-alerts-bell');
     badge.hidden = data.unread === 0;
     badge.textContent = data.unread;
@@ -756,6 +760,22 @@ async function loadAlerts() {
         <p class="hint" style="margin-top:6px;">${new Date(a.createdAt).toLocaleString()}</p>
       </div>`).join('') : '<p class="hint">No alerts yet.</p>';
   } catch (err) { /* not active yet */ }
+}
+
+// Fetching the list above never marked anything read — the bell badge
+// kept showing the same count forever, even after the person opened and
+// looked at every alert, because nothing ever called the existing
+// POST /alerts/:id/read endpoint. Now opening the Alerts page marks
+// everything currently shown as read and clears the badge immediately,
+// instead of waiting for the next full page load to (maybe) catch up.
+async function markAlertsRead() {
+  const unread = alertsCache.filter(a => !a.AlertReads || a.AlertReads.length === 0);
+  if (!unread.length) return;
+  try {
+    await Promise.all(unread.map(a => apiRequest(`/client/alerts/${a.id}/read`, { method: 'POST' })));
+    const badge = document.getElementById('badge-alerts-bell');
+    if (badge) badge.hidden = true;
+  } catch (err) { /* best-effort — badge will catch up on next load */ }
 }
 
 /* ------------------------------------------------------------------ */
