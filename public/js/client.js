@@ -917,17 +917,38 @@ function syncPlanDetailsButton() {
   const sel = document.getElementById('pay-plan');
   const btn = document.getElementById('pay-plan-details-btn');
   if (!sel || !btn) return;
-  const plan = paymentPlansCache.find(p => p.key === sel.value);
-  btn.hidden = !(plan && plan.brochure);
+  // Every plan has *something* to show — its own PDF/text brochure, or a
+  // default summary built from its tagline + features — so the button
+  // only needs to hide when there's no plan selected at all.
+  btn.hidden = !sel.value;
 }
 
 function openPlanDetails() {
   const sel = document.getElementById('pay-plan');
   const plan = paymentPlansCache.find(p => p.key === sel.value);
-  if (!plan || !plan.brochure) return;
+  if (!plan) return;
   document.getElementById('plan-details-title').textContent = plan.name;
-  document.getElementById('plan-details-body').innerHTML =
-    plan.brochure.split('\n').filter(l => l.trim()).map(l => `<p>${esc(l)}</p>`).join('');
+  const body = document.getElementById('plan-details-body');
+
+  if (plan.brochurePdfBase64) {
+    // Uploaded PDF takes priority — embed it directly so "Details" always
+    // shows something instead of relying on a popup/download the browser
+    // might block.
+    body.innerHTML = `<iframe src="${plan.brochurePdfBase64}" style="width:100%;height:60vh;border:1px solid var(--border,#ddd);border-radius:8px;"></iframe>
+      <p style="margin-top:8px;"><a href="${plan.brochurePdfBase64}" download="${esc(plan.brochurePdfName || (plan.key + '-brochure.pdf'))}" class="btn-ghost btn-sm">Download PDF</a></p>`;
+  } else if (plan.brochure && plan.brochure.trim()) {
+    body.innerHTML = plan.brochure.split('\n').filter(l => l.trim()).map(l => `<p>${esc(l)}</p>`).join('');
+  } else {
+    // No brochure set at all — fall back to a plain-English summary built
+    // from what the plan already has, so "Details" is never empty.
+    const parts = [];
+    if (plan.tagline) parts.push(`<p>${esc(plan.tagline)}</p>`);
+    parts.push(`<p>₹${plan.priceInr} · ${plan.durationDays} days · ${plan.mode === 'tracker' ? 'Self-guided Fasting Tracker' : 'Coach-led protocol'}</p>`);
+    if (Array.isArray(plan.features) && plan.features.length) {
+      parts.push(`<ul>${plan.features.map(f => `<li>${esc(f)}</li>`).join('')}</ul>`);
+    }
+    body.innerHTML = parts.join('');
+  }
   openModal('plan-details-modal');
 }
 async function submitPayment() {

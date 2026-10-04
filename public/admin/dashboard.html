@@ -321,7 +321,12 @@
     </div>
     <div class="field"><label>Tagline</label><input type="text" id="plan-tagline"></div>
     <div class="field"><label>Features (one per line)</label><textarea id="plan-features" rows="4"></textarea></div>
-    <div class="field"><label>Brochure — what this plan offers (shown to clients via a "Details" button)</label><textarea id="plan-brochure" rows="6" placeholder="One paragraph per line — each becomes its own line in the client's view."></textarea></div>
+    <div class="field"><label>Brochure text — what this plan offers (shown to clients via a "Details" button; used if no PDF is uploaded)</label><textarea id="plan-brochure" rows="6" placeholder="One paragraph per line — each becomes its own line in the client's view."></textarea></div>
+    <div class="field"><label>Brochure PDF (optional — takes priority over the text above)</label>
+      <div id="plan-brochure-pdf-preview" class="hint" style="margin-bottom:6px;">No PDF uploaded — the text brochure (or a default summary) will be shown.</div>
+      <input type="file" id="plan-brochure-pdf-input" accept="application/pdf" onchange="handleBrochureFile(this)">
+      <div style="margin-top:6px;"><button type="button" class="btn-ghost btn-sm" id="plan-brochure-pdf-remove" style="display:none;" onclick="removeBrochurePdf()">Remove PDF</button></div>
+    </div>
     <div class="error-text" id="plan-error" style="display:none;"></div>
     <button class="btn btn-primary btn-sm" onclick="submitPlan()">Save</button>
   </div>

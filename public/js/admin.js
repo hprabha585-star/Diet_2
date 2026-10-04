@@ -928,7 +928,8 @@ async function loadPlans() {
           <div class="roster-meta">₹${p.priceInr} · ${p.durationDays} days · ${esc(p.tagline || '')}</div>
         </div>
       </div>
-      <div style="display:flex;gap:8px;">
+      <div style="display:flex;gap:8px;align-items:center;">
+        ${p.brochurePdfBase64 ? '<span class="hint">PDF ✓</span>' : ''}
         <button class="btn btn-outline btn-sm" onclick='openPlanModal(${JSON.stringify(p).replace(/'/g, "&#39;")})'>Edit</button>
         <button class="btn-ghost btn-sm" onclick="deletePlan(${p.id})">Delete</button>
       </div>
@@ -938,6 +939,10 @@ async function loadPlans() {
     throw err;
   }
 }
+// undefined = unchanged, null = remove, string (data: URI) = new PDF
+let pendingBrochurePdfBase64 = undefined;
+let pendingBrochurePdfName = undefined;
+
 function openPlanModal(plan) {
   document.getElementById('plan-modal-title').textContent = plan ? 'Edit plan' : 'New plan';
   document.getElementById('plan-id').value = plan ? plan.id : '';
@@ -950,9 +955,47 @@ function openPlanModal(plan) {
   document.getElementById('plan-tagline').value = plan ? plan.tagline || '' : '';
   document.getElementById('plan-features').value = plan ? (plan.features || []).join('\n') : '';
   document.getElementById('plan-brochure').value = plan ? plan.brochure || '' : '';
+  pendingBrochurePdfBase64 = undefined;
+  pendingBrochurePdfName = undefined;
+  document.getElementById('plan-brochure-pdf-input').value = '';
+  renderBrochurePdfPreview(plan && plan.brochurePdfBase64 ? plan.brochurePdfName || 'Uploaded PDF' : null);
   document.getElementById('plan-error').style.display = 'none';
   openModal('plan-modal');
 }
+
+function renderBrochurePdfPreview(name) {
+  const preview = document.getElementById('plan-brochure-pdf-preview');
+  const removeBtn = document.getElementById('plan-brochure-pdf-remove');
+  if (name) {
+    preview.textContent = `Current file: ${name}`;
+    removeBtn.style.display = 'inline-block';
+  } else {
+    preview.textContent = 'No PDF uploaded — the text brochure (or a default summary) will be shown.';
+    removeBtn.style.display = 'none';
+  }
+}
+
+function handleBrochureFile(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  if (file.type !== 'application/pdf') { alert('Please choose a PDF file.'); input.value = ''; return; }
+  if (file.size > 8 * 1024 * 1024) { alert('Please use a PDF under 8MB.'); input.value = ''; return; }
+  const reader = new FileReader();
+  reader.onload = () => {
+    pendingBrochurePdfBase64 = reader.result; // data: URI, stored as-is
+    pendingBrochurePdfName = file.name;
+    renderBrochurePdfPreview(file.name);
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeBrochurePdf() {
+  pendingBrochurePdfBase64 = null;
+  pendingBrochurePdfName = null;
+  document.getElementById('plan-brochure-pdf-input').value = '';
+  renderBrochurePdfPreview(null);
+}
+
 async function submitPlan() {
   const errEl = document.getElementById('plan-error');
   try {
@@ -967,6 +1010,10 @@ async function submitPlan() {
       features: document.getElementById('plan-features').value.split('\n').map(s => s.trim()).filter(Boolean),
       brochure: document.getElementById('plan-brochure').value
     };
+    if (pendingBrochurePdfBase64 !== undefined) {
+      body.brochurePdfBase64 = pendingBrochurePdfBase64;
+      body.brochurePdfName = pendingBrochurePdfName;
+    }
     if (id) await apiRequest(`/admin/plans/${id}`, { method: 'PUT', body });
     else await apiRequest('/admin/plans', { method: 'POST', body });
     closeModal('plan-modal');

@@ -649,11 +649,12 @@ router.get('/plans', async (req, res) => {
 
 router.post('/plans', async (req, res) => {
   try {
-    const { key, name, priceInr, durationDays, tagline, features, brochure, mode, order } = req.body;
+    const { key, name, priceInr, durationDays, tagline, features, brochure, brochurePdfBase64, brochurePdfName, mode, order } = req.body;
     if (!key || !name || !priceInr) return res.status(400).json({ error: 'key, name and priceInr are required' });
     const plan = await Plan.create({
       key: key.toLowerCase().trim(), name, priceInr, durationDays: durationDays || 55,
       tagline: tagline || '', features: features || [], brochure: brochure || '',
+      brochurePdfBase64: brochurePdfBase64 || null, brochurePdfName: brochurePdfName || null,
       mode: mode === 'tracker' ? 'tracker' : 'protocol', order: order || 0
     });
     res.status(201).json({ plan });
@@ -666,13 +667,20 @@ router.put('/plans/:id', async (req, res) => {
   try {
     const plan = await Plan.findByPk(req.params.id);
     if (!plan) return res.status(404).json({ error: 'Plan not found' });
-    const { name, priceInr, durationDays, tagline, features, brochure, mode, order, active } = req.body;
+    const { name, priceInr, durationDays, tagline, features, brochure, brochurePdfBase64, brochurePdfName, mode, order, active } = req.body;
     if (name) plan.name = name;
     if (priceInr) plan.priceInr = priceInr;
     if (durationDays) plan.durationDays = durationDays;
     if (typeof tagline === 'string') plan.tagline = tagline;
     if (Array.isArray(features)) plan.features = features;
     if (typeof brochure === 'string') plan.brochure = brochure;
+    // brochurePdfBase64 is explicitly sent as null by the admin UI's
+    // "Remove PDF" button, so `undefined` (field simply absent from this
+    // request) must leave it untouched while `null` clears it.
+    if (brochurePdfBase64 !== undefined) {
+      plan.brochurePdfBase64 = brochurePdfBase64;
+      plan.brochurePdfName = brochurePdfBase64 ? (brochurePdfName || plan.brochurePdfName) : null;
+    }
     if (mode) plan.mode = mode === 'tracker' ? 'tracker' : 'protocol';
     if (typeof order === 'number') plan.order = order;
     if (typeof active === 'boolean') plan.active = active;

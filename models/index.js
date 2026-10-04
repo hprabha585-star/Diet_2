@@ -111,8 +111,15 @@ const Plan = sequelize.define('Plan', {
   order: { type: DataTypes.INTEGER, defaultValue: 0 },
   // Longer-form "what you get" text, shown to clients via a "View
   // details" button — separate from the short tagline/bullet features
-  // already on the pricing card itself.
-  brochure: { type: DataTypes.TEXT }
+  // already on the pricing card itself. Used as a fallback when no PDF
+  // brochure is uploaded.
+  brochure: { type: DataTypes.TEXT },
+  // Optional uploaded PDF brochure, stored as a base64 data URI (same
+  // pattern as the site logo). When present, the client Details button
+  // opens this instead of the plain-text brochure above.
+  brochurePdfBase64: { type: DataTypes.TEXT('long') },
+  // Original filename of the uploaded PDF, shown in the admin UI.
+  brochurePdfName: { type: DataTypes.STRING }
 });
 
 Plan.DEFAULTS = [
