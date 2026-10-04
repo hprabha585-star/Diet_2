@@ -38,19 +38,29 @@ async function apiRequest(path, { method = 'GET', body, auth = true } = {}) {
   return data;
 }
 
+// The Android app's WebView points at app-login.html (login-only, no
+// marketing page) instead of index.html (the full marketing site).
+// app-login.html sets this flag on load so logout / a session-expiry
+// redirect sends an app install back to its own login screen instead of
+// bouncing it to the marketing page it never saw in the first place.
+function entryPage() {
+  return localStorage.getItem('fc_app_mode') === '1' ? '/app-login.html' : '/index.html';
+}
+
 function requireRoleOrRedirect(role) {
   const user = getUser();
   const token = getToken();
   if (!token || !user || user.role !== role) {
-    window.location.href = '/index.html';
+    window.location.href = entryPage();
     return null;
   }
   return user;
 }
 
 function logout() {
+  const dest = entryPage();
   clearSession();
-  window.location.href = '/index.html';
+  window.location.href = dest;
 }
 
 // A failed section used to stay stuck on its "Loading…" placeholder

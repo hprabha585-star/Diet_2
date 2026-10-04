@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#16211D">
+<title>FastCoach — Sign in</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/landing.css">
+<style>
+/* This page is the entry point for the Android app (point the WebView's
+   URL at app-login.html instead of /) — login/register only, no marketing
+   page behind it, so opening the app always asks for sign-in first. */
+body { min-height: 100vh; display: flex; flex-direction: column; }
+.app-access { padding: 48px 0; flex: 1; display: flex; align-items: center; }
+.app-access .container { max-width: 480px; width: 100%; }
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(22,33,29,0.5); display: none;
+  align-items: center; justify-content: center; z-index: 60; padding: 24px;
+}
+.modal-backdrop.open { display: flex; }
+.modal { background: #fff; border-radius: 10px; max-width: 460px; width: 100%; max-height: 88vh; overflow-y: auto; padding: 28px; }
+.modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 12px; }
+.modal-head h3 { font-size: 19px; margin: 0; }
+.modal-close { background: none; border: none; font-size: 22px; color: #6B6F63; cursor: pointer; line-height: 1; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="container">
+    <div class="nav-logo">FastCoach</div>
+  </div>
+</nav>
+
+<section class="app-access">
+  <div class="container">
+    <h2>Sign in</h2>
+    <div class="role-toggle" style="margin-top:20px;">
+      <button class="role-btn active" id="role-client-btn" onclick="setRole('client')">Client</button>
+      <button class="role-btn" id="role-admin-btn" onclick="setRole('admin')">Coach / Admin</button>
+    </div>
+    <div class="tab-bar" style="margin-top:20px;">
+      <button class="tab-btn active" id="tab-login-btn" onclick="setTab('login')">Sign in</button>
+      <button class="tab-btn" id="tab-register-btn" onclick="setTab('register')">Create account</button>
+    </div>
+
+    <div class="auth-panel active" id="panel-login">
+      <form onsubmit="doLogin(event)">
+        <div class="field"><label>Email</label><input type="email" id="login-email" required></div>
+        <div class="field">
+          <label>Password</label>
+          <div class="pw-wrap">
+            <input type="password" id="login-password" required>
+            <button type="button" class="pw-toggle" onclick="togglePw('login-password', this)">Show</button>
+          </div>
+        </div>
+        <div class="error-text" id="login-error" style="display:none;"></div>
+        <button class="btn btn-primary" type="submit" style="width:100%;">Sign in</button>
+      </form>
+      <p id="request-admin-link" style="display:none;text-align:center;margin-top:14px;">
+        <a href="#" onclick="openFirstAdminModal(event)">First time? Create admin account</a>
+      </p>
+      <p id="request-admin-link-2" style="display:none;text-align:center;margin-top:8px;">
+        <a href="#" onclick="openRequestAdminModal(event)">Need another admin account? Request one</a>
+      </p>
+    </div>
+
+    <div class="auth-panel" id="panel-register">
+      <form onsubmit="doRegister(event)">
+        <div class="field"><label>Full name</label><input type="text" id="reg-name" required></div>
+        <div class="field"><label>Email</label><input type="email" id="reg-email" required></div>
+        <div class="field"><label>Phone</label><input type="tel" id="reg-phone"></div>
+        <div class="field">
+          <label>Password</label>
+          <div class="pw-wrap">
+            <input type="password" id="reg-password" minlength="6" required>
+            <button type="button" class="pw-toggle" onclick="togglePw('reg-password', this)">Show</button>
+          </div>
+        </div>
+        <div class="field"><label>Referral code (optional)</label><input type="text" id="reg-referral"></div>
+        <div class="error-text" id="reg-error" style="display:none;"></div>
+        <button class="btn btn-primary" type="submit" style="width:100%;">Create account</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- ========== FIRST ADMIN MODAL ========== -->
+<div class="modal-backdrop" id="first-admin-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Create admin account</h3>
+      <button class="modal-close" onclick="closeModal('first-admin-modal')">×</button>
+    </div>
+    <p class="hint">Only works once — if an admin already exists, this is disabled automatically.</p>
+    <div class="field" style="margin-top:14px;"><label>Name</label><input type="text" id="fa-name"></div>
+    <div class="field"><label>Email</label><input type="email" id="fa-email"></div>
+    <div class="field">
+      <label>Password</label>
+      <div class="pw-wrap">
+        <input type="password" id="fa-password" minlength="6">
+        <button type="button" class="pw-toggle" onclick="togglePw('fa-password', this)">Show</button>
+      </div>
+    </div>
+    <div class="error-text" id="fa-error" style="display:none;"></div>
+    <button class="btn btn-primary btn-sm" onclick="submitFirstAdmin()" style="width:100%;">Create admin account</button>
+  </div>
+</div>
+
+<!-- Request an ADDITIONAL admin account, once the one-shot bootstrap
+     above has already been used. -->
+<div class="modal-backdrop" id="request-admin-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Request admin account</h3>
+      <button class="modal-close" onclick="closeModal('request-admin-modal')">×</button>
+    </div>
+    <p class="hint">For a second coach or staff account. This submits the request — an existing admin still has to approve it in phpMyAdmin before it can sign in.</p>
+    <div class="field" style="margin-top:14px;"><label>Name</label><input type="text" id="ra-name"></div>
+    <div class="field"><label>Email</label><input type="email" id="ra-email"></div>
+    <div class="field">
+      <label>Password</label>
+      <div class="pw-wrap">
+        <input type="password" id="ra-password" minlength="6">
+        <button type="button" class="pw-toggle" onclick="togglePw('ra-password', this)">Show</button>
+      </div>
+    </div>
+    <div class="error-text" id="ra-error" style="display:none;"></div>
+    <div class="success-text" id="ra-success" style="display:none;"></div>
+    <button class="btn btn-primary btn-sm" id="ra-submit-btn" onclick="submitRequestAdmin()" style="width:100%;">Submit request</button>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script>
+let role = 'client';
+function setRole(r) {
+  role = r;
+  document.getElementById('role-client-btn').classList.toggle('active', r === 'client');
+  document.getElementById('role-admin-btn').classList.toggle('active', r === 'admin');
+  document.getElementById('panel-register').style.display = r === 'admin' ? 'none' : '';
+  document.querySelector('.tab-bar').style.display = r === 'admin' ? 'none' : '';
+  document.getElementById('request-admin-link').style.display = r === 'admin' ? 'block' : 'none';
+  document.getElementById('request-admin-link-2').style.display = r === 'admin' ? 'block' : 'none';
+}
+function setTab(t) {
+  document.getElementById('tab-login-btn').classList.toggle('active', t === 'login');
+  document.getElementById('tab-register-btn').classList.toggle('active', t === 'register');
+  document.getElementById('panel-login').classList.toggle('active', t === 'login');
+  document.getElementById('panel-register').classList.toggle('active', t === 'register');
+}
+function togglePw(id, btn) {
+  const el = document.getElementById(id);
+  const show = el.type === 'password';
+  el.type = show ? 'text' : 'password';
+  btn.textContent = show ? 'Hide' : 'Show';
+}
+
+/* ---- First admin modal ---- */
+function openFirstAdminModal(e) {
+  e.preventDefault();
+  document.getElementById('fa-name').value = '';
+  document.getElementById('fa-email').value = '';
+  document.getElementById('fa-password').value = '';
+  document.getElementById('fa-error').style.display = 'none';
+  document.getElementById('first-admin-modal').classList.add('open');
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+async function submitFirstAdmin() {
+  const errEl = document.getElementById('fa-error');
+  errEl.style.display = 'none';
+  try {
+    const body = {
+      name: document.getElementById('fa-name').value.trim(),
+      email: document.getElementById('fa-email').value.trim(),
+      password: document.getElementById('fa-password').value
+    };
+    if (!body.name || !body.email || !body.password) throw new Error('All fields are required');
+    if (body.password.length < 6) throw new Error('Password must be at least 6 characters');
+    await apiRequest('/auth/create-first-admin', { method: 'POST', auth: false, body });
+    alert('Admin account created. You can now sign in as Coach / Admin.');
+    closeModal('first-admin-modal');
+    setRole('admin');
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  }
+}
+
+/* ---- Request-admin modal (second+ admin, needs phpMyAdmin approval) ---- */
+function openRequestAdminModal(e) {
+  e.preventDefault();
+  document.getElementById('ra-name').value = '';
+  document.getElementById('ra-email').value = '';
+  document.getElementById('ra-password').value = '';
+  document.getElementById('ra-error').style.display = 'none';
+  document.getElementById('ra-success').style.display = 'none';
+  document.getElementById('ra-submit-btn').style.display = 'block';
+  document.getElementById('request-admin-modal').classList.add('open');
+}
+async function submitRequestAdmin() {
+  const errEl = document.getElementById('ra-error');
+  errEl.style.display = 'none';
+  try {
+    const body = {
+      name: document.getElementById('ra-name').value.trim(),
+      email: document.getElementById('ra-email').value.trim(),
+      password: document.getElementById('ra-password').value
+    };
+    if (!body.name || !body.email || !body.password) throw new Error('All fields are required');
+    if (body.password.length < 6) throw new Error('Password must be at least 6 characters');
+    await apiRequest('/auth/request-admin', { method: 'POST', auth: false, body });
+    const successEl = document.getElementById('ra-success');
+    successEl.innerHTML = `Request submitted for <strong>${esc(body.email)}</strong>.<br><br>
+      To approve it: hPanel → Databases → phpMyAdmin → open the <code>Users</code> table →
+      find this row → change its <code>status</code> from <code>pending_approval</code> to
+      <code>active</code>. It can then sign in as Coach / Admin.`;
+    successEl.style.display = 'block';
+    document.getElementById('ra-submit-btn').style.display = 'none';
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  }
+}
+
+async function doLogin(e) {
+  e.preventDefault();
+  const errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+  try {
+    const email = document.getElementById('login-email').value;
+    const password = document.getElementById('login-password').value;
+    const data = await apiRequest('/auth/login', { method: 'POST', auth: false, body: { email, password } });
+    if (role === 'admin' && data.user.role !== 'admin') {
+      throw new Error('This is a client account — switch to the "Client" tab to sign in.');
+    }
+    if (role === 'client' && data.user.role !== 'client') {
+      throw new Error('This is a coach/admin account — switch to the "Coach / Admin" tab to sign in.');
+    }
+    setSession(data.token, data.user);
+    window.location.href = data.user.role === 'admin' ? '/admin/dashboard.html' : '/client/dashboard.html';
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  }
+}
+
+async function doRegister(e) {
+  e.preventDefault();
+  const errEl = document.getElementById('reg-error');
+  errEl.style.display = 'none';
+  try {
+    const body = {
+      name: document.getElementById('reg-name').value,
+      email: document.getElementById('reg-email').value,
+      phone: document.getElementById('reg-phone').value,
+      password: document.getElementById('reg-password').value,
+      referralCode: document.getElementById('reg-referral').value
+    };
+    const data = await apiRequest('/auth/register', { method: 'POST', auth: false, body });
+    setSession(data.token, data.user);
+    window.location.href = '/client/dashboard.html';
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  }
+}
+
+// Marks this install as "app mode" so logout() and any session-expiry
+// redirect (in js/api.js) come back here instead of the marketing page.
+localStorage.setItem('fc_app_mode', '1');
+
+applyBranding();
+setRole('client');
+
+// A referral link (?ref=CODE) pre-fills the code and jumps straight to
+// the Create account tab, so whoever clicks it doesn't have to find the
+// referral field or type anything in by hand.
+(function prefillReferral() {
+  const ref = new URLSearchParams(location.search).get('ref');
+  if (!ref) return;
+  document.getElementById('reg-referral').value = ref;
+  setTab('register');
+})();
+
+// If a session is already active (e.g. a token saved from a previous
+// sign-in in this app install) when this page loads, skip straight to
+// the right dashboard instead of showing the login form again.
+(function redirectIfLoggedIn() {
+  const user = getUser();
+  const token = getToken();
+  if (token && user) {
+    window.location.href = user.role === 'admin' ? '/admin/dashboard.html' : '/client/dashboard.html';
+  }
+})();
+</script>
+</body>
+</html>
