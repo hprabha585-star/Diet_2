@@ -26,6 +26,7 @@
       <a href="#payouts" class="nav-link" data-view="payouts"><span class="ico">↗</span><span>Referral payouts</span></a>
       <a href="#referrals" class="nav-link" data-view="referrals"><span class="ico">⇄</span><span>Referral overview</span></a>
       <a href="#plans" class="nav-link" data-view="plans"><span class="ico">₪</span><span>Plans &amp; pricing</span></a>
+      <a href="#journal" class="nav-link" data-view="journal"><span class="ico">📓</span><span>SVR Journal</span></a>
       <a href="#alerts" class="nav-link" data-view="alerts"><span class="ico">!</span><span>Send alerts</span></a>
       <a href="#chat" class="nav-link" data-view="chat"><span class="ico">✉</span><span>Messages</span><span class="nav-badge" id="badge-chat" hidden>0</span></a>
       <a href="#settings" class="nav-link" data-view="settings"><span class="ico">☎</span><span>Contact details</span></a>
@@ -133,6 +134,15 @@
           <button class="btn btn-dark btn-sm" onclick="openPlanModal()">+ New plan</button>
         </div>
         <div id="plans-list" class="roster-list"><p class="hint">Loading…</p></div>
+      </div>
+
+      <!-- SVR JOURNAL / PERSONAL NOTES -->
+      <div class="view" id="view-journal">
+        <div class="row-between" style="margin-bottom:14px;">
+          <span class="hint">Topics shown to every active client on their Program guide page — a title, a short write-up, and an optional YouTube link.</span>
+          <button class="btn btn-dark btn-sm" onclick="openJournalModal()">+ New topic</button>
+        </div>
+        <div id="journal-list" class="roster-list"><p class="hint">Loading…</p></div>
       </div>
 
       <!-- ALERTS -->
@@ -319,6 +329,19 @@
       <div class="field" style="flex:1;"><label>Price (₹)</label><input type="number" id="plan-price"></div>
       <div class="field" style="flex:1;"><label>Duration (days)</label><input type="number" id="plan-duration" value="55"></div>
     </div>
+    <div class="field"><label>Quick duration presets</label>
+      <div class="duration-preset-row" style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button type="button" class="btn-ghost btn-sm" onclick="setPlanDuration(1)">1 day</button>
+        <button type="button" class="btn-ghost btn-sm" onclick="setPlanDuration(3)">3 days</button>
+        <button type="button" class="btn-ghost btn-sm" onclick="setPlanDuration(7)">7 days</button>
+        <button type="button" class="btn-ghost btn-sm" onclick="setPlanDuration(15)">15 days</button>
+        <button type="button" class="btn-ghost btn-sm" onclick="setPlanDuration(30)">1 month</button>
+        <button type="button" class="btn-ghost btn-sm" onclick="setPlanDuration(55)">55 days</button>
+      </div>
+    </div>
+    <div class="field"><label class="check-line"><input type="checkbox" id="plan-is-trial"> This is a trial / intro plan</label>
+      <div class="hint" style="margin-top:4px;">Hidden from any client who has already paid for a non-trial plan, so an existing paying client never sees it as a downgrade option.</div>
+    </div>
     <div class="field"><label>Tagline</label><input type="text" id="plan-tagline"></div>
     <div class="field"><label>Features (one per line)</label><textarea id="plan-features" rows="4"></textarea></div>
     <div class="field"><label>Brochure text — what this plan offers (shown to clients via a "Details" button; used if no PDF is uploaded)</label><textarea id="plan-brochure" rows="6" placeholder="One paragraph per line — each becomes its own line in the client's view."></textarea></div>
@@ -329,6 +352,19 @@
     </div>
     <div class="error-text" id="plan-error" style="display:none;"></div>
     <button class="btn btn-primary btn-sm" onclick="submitPlan()">Save</button>
+  </div>
+</div>
+
+<!-- JOURNAL TOPIC modal (create/edit) -->
+<div class="modal-backdrop" id="journal-modal">
+  <div class="modal">
+    <div class="modal-head"><h3 id="journal-modal-title">New topic</h3><button class="modal-close" onclick="closeModal('journal-modal')">×</button></div>
+    <input type="hidden" id="journal-id">
+    <div class="field"><label>Title</label><input type="text" id="journal-title" placeholder="e.g. Why does belly fat build up?"></div>
+    <div class="field"><label>Description</label><textarea id="journal-description" rows="5"></textarea></div>
+    <div class="field"><label>YouTube link (optional)</label><input type="text" id="journal-youtube" placeholder="https://youtube.com/watch?v=…"></div>
+    <div class="error-text" id="journal-error" style="display:none;"></div>
+    <button class="btn btn-primary btn-sm" onclick="submitJournalTopic()">Save</button>
   </div>
 </div>
 

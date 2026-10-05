@@ -5,7 +5,7 @@ const {
   User, WeightLog, Plan, Payment, Payout,
   Regimen, RegimenMeal, RegimenMilestone,
   ChecklistLog, ChecklistItem, WaterEntry,
-  Alert, AlertRead, Message, Settings, ProtocolDay, TrackerSession, TrackerWaterEntry
+  Alert, AlertRead, Message, Settings, ProtocolDay, TrackerSession, TrackerWaterEntry, JournalTopic
 } = require('../models');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { generateReferralCode } = require('../utils/helpers');
@@ -571,6 +571,11 @@ router.post('/payments/:id/approve', async (req, res) => {
     client.planMode = plan ? plan.mode : 'protocol';
     client.challengeStartDate = new Date().toISOString().slice(0, 10);
     client.challengeLengthDays = plan ? plan.durationDays : 55;
+    // Once a client has paid for any non-trial plan, trial/intro plans
+    // stay hidden from them from now on (see GET /client/plans) — even if
+    // they later re-subscribe to another trial by mistake, this flag is
+    // never cleared.
+    if (plan && !plan.isTrial) client.hadPaidPlan = true;
     await client.save();
 
     // First-ever approved payment triggers the referral reward.
@@ -649,13 +654,13 @@ router.get('/plans', async (req, res) => {
 
 router.post('/plans', async (req, res) => {
   try {
-    const { key, name, priceInr, durationDays, tagline, features, brochure, brochurePdfBase64, brochurePdfName, mode, order } = req.body;
+    const { key, name, priceInr, durationDays, tagline, features, brochure, brochurePdfBase64, brochurePdfName, mode, order, isTrial } = req.body;
     if (!key || !name || !priceInr) return res.status(400).json({ error: 'key, name and priceInr are required' });
     const plan = await Plan.create({
       key: key.toLowerCase().trim(), name, priceInr, durationDays: durationDays || 55,
       tagline: tagline || '', features: features || [], brochure: brochure || '',
       brochurePdfBase64: brochurePdfBase64 || null, brochurePdfName: brochurePdfName || null,
-      mode: mode === 'tracker' ? 'tracker' : 'protocol', order: order || 0
+      mode: mode === 'tracker' ? 'tracker' : 'protocol', order: order || 0, isTrial: !!isTrial
     });
     res.status(201).json({ plan });
   } catch (err) {
@@ -667,13 +672,14 @@ router.put('/plans/:id', async (req, res) => {
   try {
     const plan = await Plan.findByPk(req.params.id);
     if (!plan) return res.status(404).json({ error: 'Plan not found' });
-    const { name, priceInr, durationDays, tagline, features, brochure, brochurePdfBase64, brochurePdfName, mode, order, active } = req.body;
+    const { name, priceInr, durationDays, tagline, features, brochure, brochurePdfBase64, brochurePdfName, mode, order, active, isTrial } = req.body;
     if (name) plan.name = name;
     if (priceInr) plan.priceInr = priceInr;
     if (durationDays) plan.durationDays = durationDays;
     if (typeof tagline === 'string') plan.tagline = tagline;
     if (Array.isArray(features)) plan.features = features;
     if (typeof brochure === 'string') plan.brochure = brochure;
+    if (typeof isTrial === 'boolean') plan.isTrial = isTrial;
     // brochurePdfBase64 is explicitly sent as null by the admin UI's
     // "Remove PDF" button, so `undefined` (field simply absent from this
     // request) must leave it untouched while `null` clears it.
@@ -693,6 +699,49 @@ router.put('/plans/:id', async (req, res) => {
 
 router.delete('/plans/:id', async (req, res) => {
   await Plan.destroy({ where: { id: req.params.id } });
+  res.json({ ok: true });
+});
+
+/* ------------------------------------------------------------------ */
+/* SVR Journal / Personal Notes — coach-written topics (title +        */
+/* description + an optional YouTube link) shown to every active        */
+/* client on their Program Guide page.                                  */
+/* ------------------------------------------------------------------ */
+router.get('/journal', async (req, res) => {
+  const topics = await JournalTopic.findAll({ order: [['order', 'ASC'], ['id', 'ASC']] });
+  res.json({ topics });
+});
+
+router.post('/journal', async (req, res) => {
+  try {
+    const { title, description, youtubeUrl, order } = req.body;
+    if (!title) return res.status(400).json({ error: 'title is required' });
+    const topic = await JournalTopic.create({ title, description: description || '', youtubeUrl: youtubeUrl || '', order: order || 0 });
+    res.status(201).json({ topic });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not create journal topic', detail: err.message });
+  }
+});
+
+router.put('/journal/:id', async (req, res) => {
+  try {
+    const topic = await JournalTopic.findByPk(req.params.id);
+    if (!topic) return res.status(404).json({ error: 'Topic not found' });
+    const { title, description, youtubeUrl, order, active } = req.body;
+    if (title) topic.title = title;
+    if (typeof description === 'string') topic.description = description;
+    if (typeof youtubeUrl === 'string') topic.youtubeUrl = youtubeUrl;
+    if (typeof order === 'number') topic.order = order;
+    if (typeof active === 'boolean') topic.active = active;
+    await topic.save();
+    res.json({ topic });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not update journal topic', detail: err.message });
+  }
+});
+
+router.delete('/journal/:id', async (req, res) => {
+  await JournalTopic.destroy({ where: { id: req.params.id } });
   res.json({ ok: true });
 });
 

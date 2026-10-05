@@ -53,9 +53,20 @@
         </div>
       </div>
 
+      <!-- Shown once a client's plan validity has run out — replaces the
+           checklist/tracker entirely until they renew. -->
+      <div class="notice notice-warn card" id="expired-notice" style="display:none;">
+        <div>
+          <strong>Your plan ended on <span id="expired-due-date">—</span>.</strong>
+          <p>Renew to keep access to your dashboard, coach chat and tracking.</p>
+          <button class="btn btn-primary btn-sm" style="margin-top:10px;" onclick="showView('payment')">Unlock for Premium Access</button>
+        </div>
+      </div>
+
       <!-- TODAY -->
       <div class="view active" id="view-today">
         <div class="card progress-strip" id="progress-strip" style="display:none;"></div>
+        <div class="card hint" id="validity-banner" style="display:none;margin-bottom:12px;"></div>
         <div class="progress-bars" id="progress-bars" style="display:none;"></div>
 
         <div id="today-protocol" style="display:none;">
@@ -157,6 +168,9 @@
       <div class="view" id="view-guide">
         <div class="page-intro"><h2>Program guide</h2><p class="hint">What your coach has planned for each day.</p></div>
         <div id="guide-list"><p class="hint">Loading…</p></div>
+
+        <div class="section-subtitle" style="margin-top:24px;">SVR Journal / Personal Notes</div>
+        <div id="journal-list"><p class="hint">Loading…</p></div>
       </div>
 
       <!-- LEADERBOARD -->

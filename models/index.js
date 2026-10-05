@@ -1,5 +1,6 @@
 const { sequelize } = require('../config/db');
 const { DataTypes } = require('sequelize');
+const { isoDate } = require('../utils/helpers');
 
 /* ------------------------------------------------------------------ */
 /* User                                                                 */
@@ -44,7 +45,13 @@ const User = sequelize.define('User', {
   gender: { type: DataTypes.ENUM('female', 'male', 'other', ''), defaultValue: '' },
 
   // Self-guided tracker: daily water goal (only meaningful for planMode='tracker')
-  waterGoalMl: { type: DataTypes.INTEGER, defaultValue: 3000 }
+  waterGoalMl: { type: DataTypes.INTEGER, defaultValue: 3000 },
+
+  // Set true the first time a payment for a non-trial plan is approved
+  // for this client, and never cleared after. Used to hide trial/intro
+  // plans from someone who has already bought in at a paid tier, so a
+  // paying client is never shown what looks like a downgrade option.
+  hadPaidPlan: { type: DataTypes.BOOLEAN, defaultValue: false }
 });
 
 User.prototype.currentChallengeDay = function () {
@@ -61,6 +68,38 @@ User.prototype.currentChallengeDay = function () {
   const diffDays = Math.round((todayLocal - startLocal) / 86400000);
   const day = diffDays + 1 - (this.pausedDays || 0);
   return Math.max(0, Math.min(day, this.challengeLengthDays));
+};
+
+// ---- Plan validity (enrollment date + duration) ----------------------
+// challengeStartDate + challengeLengthDays is already set on every
+// approved payment (see routes/admin.js payments/:id/approve); these just
+// expose it as "days left" / a due date / an expired flag so the
+// dashboard can show it and lock access once a plan has run out.
+User.prototype.dueDate = function () {
+  if (!this.challengeStartDate) return null;
+  const start = new Date(this.challengeStartDate + 'T00:00:00');
+  start.setDate(start.getDate() + this.challengeLengthDays + (this.pausedDays || 0));
+  return isoDate(start);
+};
+// Raw elapsed calendar days since enrollment, paused days excluded —
+// NOT capped at challengeLengthDays (currentChallengeDay() caps it; this
+// is what lets isExpired() tell "day 55 of 55" apart from "day 60 of 55").
+User.prototype.elapsedChallengeDay = function () {
+  if (!this.challengeStartDate) return 0;
+  const start = new Date(this.challengeStartDate + 'T00:00:00');
+  const today = new Date();
+  const startLocal = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const todayLocal = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const diffDays = Math.round((todayLocal - startLocal) / 86400000);
+  return diffDays + 1 - (this.pausedDays || 0);
+};
+User.prototype.daysLeft = function () {
+  if (!this.challengeStartDate) return null;
+  return Math.max(0, this.challengeLengthDays - this.elapsedChallengeDay());
+};
+User.prototype.isExpired = function () {
+  if (!this.challengeStartDate) return false;
+  return this.elapsedChallengeDay() > this.challengeLengthDays;
 };
 
 User.prototype.bmi = function (latestWeightKg) {
@@ -119,7 +158,12 @@ const Plan = sequelize.define('Plan', {
   // opens this instead of the plain-text brochure above.
   brochurePdfBase64: { type: DataTypes.TEXT('long') },
   // Original filename of the uploaded PDF, shown in the admin UI.
-  brochurePdfName: { type: DataTypes.STRING }
+  brochurePdfName: { type: DataTypes.STRING },
+  // Marks a short intro/trial plan (e.g. a 3-day or 7-day plan). Trial
+  // plans are hidden from a client who has already paid for a non-trial
+  // plan once (see User.hadPaidPlan), so an existing paying client is
+  // never shown what looks like a downgrade option.
+  isTrial: { type: DataTypes.BOOLEAN, defaultValue: false }
 });
 
 Plan.DEFAULTS = [
@@ -310,6 +354,20 @@ ProtocolDay.getAllOrSeed = async function () {
   return rows;
 };
 
+/* ------------------------------------------------------------------ */
+/* JournalTopic — "SVR Journal / Personal Notes": coach-written topics  */
+/* (title + description + an optional YouTube link) shown to clients on */
+/* their Program Guide page. One shared list, same as the 55-day        */
+/* protocol — not per-client.                                           */
+/* ------------------------------------------------------------------ */
+const JournalTopic = sequelize.define('JournalTopic', {
+  title: { type: DataTypes.STRING, allowNull: false },
+  description: { type: DataTypes.TEXT },
+  youtubeUrl: { type: DataTypes.STRING },
+  order: { type: DataTypes.INTEGER, defaultValue: 0 },
+  active: { type: DataTypes.BOOLEAN, defaultValue: true }
+});
+
 const Settings = sequelize.define('Settings', {
   singleton: { type: DataTypes.STRING, defaultValue: 'main', unique: true },
   coachName: { type: DataTypes.STRING, defaultValue: '' },
@@ -475,6 +533,6 @@ module.exports = {
   sequelize, User, WeightLog, Plan, Payment, Payout,
   Regimen, RegimenMeal, RegimenMilestone,
   ChecklistLog, ChecklistItem, WaterEntry,
-  Alert, AlertRead, Message, Settings, ProtocolDay,
+  Alert, AlertRead, Message, Settings, ProtocolDay, JournalTopic,
   TrackerSession, TrackerWaterEntry, TrackerProfile, MealEntry, RestDay, TrackerTaskLog
 };

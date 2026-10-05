@@ -3,7 +3,7 @@ const {
   User, WeightLog, Plan, Payment, Payout,
   Regimen, RegimenMeal, RegimenMilestone,
   ChecklistLog, ChecklistItem, WaterEntry,
-  Alert, AlertRead, Message, Settings, TrackerSession, TrackerWaterEntry
+  Alert, AlertRead, Message, Settings, TrackerSession, TrackerWaterEntry, JournalTopic
 } = require('../models');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { buildChecklistItems } = require('../utils/helpers');
@@ -22,6 +22,23 @@ function requireActive(req, res, next) {
     return res.status(403).json({ error: 'Your account is not active yet. Please complete payment and wait for coach approval.' });
   }
   next();
+}
+
+// Fires a one-time "your plan expired" alert the first time a protocol
+// client's validity window runs out. Keyed by the exact due date in the
+// title, so a client who renews and later expires again on a NEW due
+// date gets a fresh alert instead of being silently skipped forever.
+async function maybeRaiseExpiryAlert(user) {
+  if (user.planMode !== 'protocol' || user.status !== 'active' || !user.isExpired()) return;
+  const dueDate = user.dueDate();
+  const title = `Plan expired — ${dueDate}`;
+  const existing = await Alert.findOne({ where: { userId: user.id, title } });
+  if (existing) return;
+  await Alert.create({
+    userId: user.id, title,
+    body: `Your plan validity ended on ${dueDate}. Renew to keep access to your dashboard, coach chat and tracking.`,
+    level: 'important'
+  });
 }
 
 async function getOrCreateChecklistLog(userId, day) {
@@ -82,6 +99,23 @@ router.get('/dashboard', requireActive, async (req, res) => {
     });
   }
 
+  await maybeRaiseExpiryAlert(user);
+
+  // Validity ran out — lock the dashboard content itself and send just
+  // enough to show a "plan expired, renew to continue" screen instead of
+  // today's checklist/window, which would otherwise just keep showing
+  // the last day on repeat with no indication anything has changed.
+  if (user.isExpired()) {
+    return res.json({
+      planMode: 'protocol',
+      expired: true,
+      user: user.toSafeJSON(),
+      challengeLengthDays: user.challengeLengthDays,
+      dueDate: user.dueDate(),
+      daysLeft: 0
+    });
+  }
+
   const day = user.currentChallengeDay();
   const { regimen, log } = await syncChecklistWithRegimen(user, day);
   // The coach may have added or removed items since the last tick, so the
@@ -91,9 +125,12 @@ router.get('/dashboard', requireActive, async (req, res) => {
 
   res.json({
     planMode: 'protocol',
+    expired: false,
     user: user.toSafeJSON(),
     day,
     challengeLengthDays: user.challengeLengthDays,
+    daysLeft: user.daysLeft(),
+    dueDate: user.dueDate(),
     fastingPause: { active: user.pauseActive, reason: user.pauseReason },
     // Only raw window data goes to the client — it computes fasting/eating
     // state and the countdown itself in the browser's local time, so the
@@ -457,8 +494,20 @@ router.get('/payment-status', async (req, res) => {
 });
 
 router.get('/plans', async (req, res) => {
-  const plans = await Plan.findAll({ where: { active: true }, order: [['order', 'ASC'], ['priceInr', 'ASC']] });
+  let plans = await Plan.findAll({ where: { active: true }, order: [['order', 'ASC'], ['priceInr', 'ASC']] });
+  // A client who has already paid for a non-trial plan never sees trial/
+  // intro plans in their own picker — otherwise a paying client looking
+  // to add or renew a plan is shown what reads as a downgrade option.
+  if (req.user.hadPaidPlan) plans = plans.filter(p => !p.isTrial);
   res.json({ plans });
+});
+
+// GET /client/journal — "SVR Journal / Personal Notes": coach-written
+// topics shown on the Program Guide page. Same list for every active
+// client (protocol or tracker) — read-only here.
+router.get('/journal', requireActive, async (req, res) => {
+  const topics = await JournalTopic.findAll({ where: { active: true }, order: [['order', 'ASC'], ['id', 'ASC']] });
+  res.json({ topics });
 });
 
 /* ------------------------------------------------------------------ */

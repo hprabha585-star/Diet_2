@@ -1,3 +1,11 @@
+// Local calendar date (YYYY-MM-DD) for a JS Date, using the SERVER's own
+// clock — used only for day-count math that already works in whole
+// calendar days (challenge start/due dates), never for anything the
+// client's browser should be computing in its own timezone instead.
+function isoDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function generateReferralCode(name) {
   const base = (name || 'FC').replace(/[^a-zA-Z]/g, '').slice(0, 4).toUpperCase() || 'FCUS';
   const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
@@ -42,4 +50,4 @@ function recalcCompletion(items) {
   return scored.length ? Math.round((done / scored.length) * 100) : 0;
 }
 
-module.exports = { generateReferralCode, buildChecklistItems, recalcCompletion };
+module.exports = { generateReferralCode, buildChecklistItems, recalcCompletion, isoDate };

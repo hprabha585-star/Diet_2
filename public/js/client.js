@@ -70,7 +70,7 @@ function showView(view) {
   closeSidebar();
   if (view === 'chat') loadChat();
   if (view === 'history') loadHistoryPage();
-  if (view === 'guide') loadProgramGuide();
+  if (view === 'guide') { loadProgramGuide(); loadJournalTopics(); }
   if (view === 'leaderboard') loadClientLeaderboard();
   if (view === 'alerts') markAlertsRead();
 }
@@ -120,6 +120,26 @@ async function loadProgramGuide() {
 }
 
 /* ------------------------------------------------------------------ */
+/* SVR Journal / Personal Notes — coach-written topics, shown below the */
+/* day-by-day guide. Same list for protocol and tracker clients.        */
+/* ------------------------------------------------------------------ */
+async function loadJournalTopics() {
+  const el = document.getElementById('journal-list');
+  if (!el) return;
+  try {
+    const data = await apiRequest('/client/journal');
+    el.innerHTML = data.topics.length ? data.topics.map(t => `
+      <div class="card" style="margin-bottom:10px;">
+        <div style="font-weight:600;">${esc(t.title)}</div>
+        ${t.description ? `<p class="hint" style="margin-top:6px;">${esc(t.description)}</p>` : ''}
+        ${t.youtubeUrl ? `<a class="btn btn-outline btn-sm" style="margin-top:10px;" href="${esc(t.youtubeUrl)}" target="_blank" rel="noopener">▶ Watch video</a>` : ''}
+      </div>`).join('') : '<p class="hint">No journal topics yet.</p>';
+  } catch (err) {
+    el.innerHTML = `<p class="hint">${esc(err.message)}</p>`;
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* Leaderboard — points/streaks across the whole coached cohort         */
 /* ------------------------------------------------------------------ */
 async function loadClientLeaderboard() {
@@ -155,6 +175,7 @@ async function loadDashboard() {
   } catch (err) {
     if (err.message.includes('not active')) {
       document.getElementById('locked-notice').style.display = 'flex';
+      document.getElementById('expired-notice').style.display = 'none';
       document.getElementById('today-protocol').style.display = 'none';
       document.getElementById('today-tracker-redirect').style.display = 'none';
       return;
@@ -163,6 +184,20 @@ async function loadDashboard() {
   }
 
   document.getElementById('plan-mode-tag').textContent = dashboardData.planMode === 'tracker' ? 'Fasting Tracker' : 'Coached client';
+
+  // Validity ran out — show the renew prompt and hide everything else
+  // instead of letting today's checklist/window keep showing on repeat.
+  if (dashboardData.expired) {
+    document.getElementById('expired-due-date').textContent = dashboardData.dueDate || '';
+    document.getElementById('expired-notice').style.display = 'flex';
+    document.getElementById('today-protocol').style.display = 'none';
+    document.getElementById('today-tracker-redirect').style.display = 'none';
+    document.getElementById('progress-bars').style.display = 'none';
+    document.getElementById('validity-banner').style.display = 'none';
+    if (timerInterval) clearInterval(timerInterval);
+    return;
+  }
+  document.getElementById('expired-notice').style.display = 'none';
 
   // Fasting Tracker nav item: unlocked only when this IS the client's plan.
   const navTracker = document.getElementById('nav-tracker');
@@ -173,10 +208,18 @@ async function loadDashboard() {
     document.getElementById('today-protocol').style.display = 'none';
     document.getElementById('today-tracker-redirect').style.display = 'block';
     document.getElementById('progress-bars').style.display = 'none';
+    document.getElementById('validity-banner').style.display = 'none';
   } else {
     document.getElementById('today-tracker-redirect').style.display = 'none';
     document.getElementById('today-protocol').style.display = 'block';
     renderProtocolToday();
+    const banner = document.getElementById('validity-banner');
+    if (typeof dashboardData.daysLeft === 'number' && dashboardData.dueDate) {
+      banner.textContent = `${dashboardData.daysLeft} day${dashboardData.daysLeft === 1 ? '' : 's'} left on your plan — valid through ${dashboardData.dueDate}.`;
+      banner.style.display = 'block';
+    } else {
+      banner.style.display = 'none';
+    }
   }
 
   if (timerInterval) clearInterval(timerInterval);
@@ -505,8 +548,14 @@ async function loadHistoryPage(opts = {}) {
         : w.delta === 0 ? '<span class="delta flat">no change</span>'
         : w.delta > 0 ? `<span class="delta up">▲ ${w.delta} kg</span>`
         : `<span class="delta down">▼ ${Math.abs(w.delta)} kg</span>`;
+      // The timestamp was already recorded at check-in time — this was
+      // only ever dropping it at display time by formatting the date
+      // alone, so the time of day the client actually weighed in never
+      // showed anywhere.
+      const when = new Date(w.date);
+      const whenStr = `${when.toLocaleDateString()} ${when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
       return `<div class="row-between weight-row" style="padding:10px 0;border-top:1px solid var(--line);">
-        <span>${w.weightKg} kg — ${new Date(w.date).toLocaleDateString()} ${deltaHtml}</span>
+        <span>${w.weightKg} kg — ${whenStr} ${deltaHtml}</span>
         <button class="btn-ghost btn-sm" onclick="deleteWeight(${w.id})">Delete</button>
       </div>`;
     }).join('') || '<p class="hint">No entries yet.</p>';

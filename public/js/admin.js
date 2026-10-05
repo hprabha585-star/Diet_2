@@ -32,6 +32,7 @@ async function init() {
     () => safeLoad(loadMealPresets, 'meal presets'),
     () => safeLoad(loadRoster, 'the client roster'),
     () => safeLoad(loadPlans, 'plans'),
+    () => safeLoad(loadJournal, 'journal topics'),
     () => safeLoad(loadPayments, 'payments'),
     () => safeLoad(loadLeaderboard, 'the leaderboard'),
     () => safeLoad(loadPayouts, 'payouts'),
@@ -924,7 +925,7 @@ async function loadPlans() {
     <div class="roster-card">
       <div class="roster-main">
         <div style="min-width:0;">
-          <div class="roster-name">${esc(p.name)} <span class="badge badge-${p.mode === 'tracker' ? 'pending' : 'active'}">${p.mode === 'tracker' ? 'Fasting Tracker' : 'Coached'}</span></div>
+          <div class="roster-name">${esc(p.name)} <span class="badge badge-${p.mode === 'tracker' ? 'pending' : 'active'}">${p.mode === 'tracker' ? 'Fasting Tracker' : 'Coached'}</span>${p.isTrial ? ' <span class="badge badge-pending">Trial</span>' : ''}</div>
           <div class="roster-meta">₹${p.priceInr} · ${p.durationDays} days · ${esc(p.tagline || '')}</div>
         </div>
       </div>
@@ -952,6 +953,7 @@ function openPlanModal(plan) {
   document.getElementById('plan-mode').value = plan ? plan.mode : 'protocol';
   document.getElementById('plan-price').value = plan ? plan.priceInr : '';
   document.getElementById('plan-duration').value = plan ? plan.durationDays : 55;
+  document.getElementById('plan-is-trial').checked = plan ? !!plan.isTrial : false;
   document.getElementById('plan-tagline').value = plan ? plan.tagline || '' : '';
   document.getElementById('plan-features').value = plan ? (plan.features || []).join('\n') : '';
   document.getElementById('plan-brochure').value = plan ? plan.brochure || '' : '';
@@ -961,6 +963,10 @@ function openPlanModal(plan) {
   renderBrochurePdfPreview(plan && plan.brochurePdfBase64 ? plan.brochurePdfName || 'Uploaded PDF' : null);
   document.getElementById('plan-error').style.display = 'none';
   openModal('plan-modal');
+}
+
+function setPlanDuration(days) {
+  document.getElementById('plan-duration').value = days;
 }
 
 function renderBrochurePdfPreview(name) {
@@ -1008,7 +1014,8 @@ async function submitPlan() {
       durationDays: parseInt(document.getElementById('plan-duration').value, 10),
       tagline: document.getElementById('plan-tagline').value,
       features: document.getElementById('plan-features').value.split('\n').map(s => s.trim()).filter(Boolean),
-      brochure: document.getElementById('plan-brochure').value
+      brochure: document.getElementById('plan-brochure').value,
+      isTrial: document.getElementById('plan-is-trial').checked
     };
     if (pendingBrochurePdfBase64 !== undefined) {
       body.brochurePdfBase64 = pendingBrochurePdfBase64;
@@ -1026,6 +1033,69 @@ async function submitPlan() {
 async function deletePlan(id) {
   if (!confirm('Delete this plan?')) return;
   try { await apiRequest(`/admin/plans/${id}`, { method: 'DELETE' }); await loadPlans(); }
+  catch (err) { alert(err.message); }
+}
+
+/* ------------------------------------------------------------------ */
+/* SVR Journal / Personal Notes                                         */
+/* ------------------------------------------------------------------ */
+let journalCache = [];
+
+async function loadJournal() {
+  try {
+    const data = await apiRequest('/admin/journal');
+    journalCache = data.topics;
+    document.getElementById('journal-list').innerHTML = journalCache.length ? journalCache.map(t => `
+      <div class="roster-card">
+        <div class="roster-main">
+          <div style="min-width:0;">
+            <div class="roster-name">${esc(t.title)}</div>
+            <div class="roster-meta">${esc((t.description || '').slice(0, 80))}${t.youtubeUrl ? ' · 🎬 video linked' : ''}</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline btn-sm" onclick='openJournalModal(${JSON.stringify(t).replace(/'/g, "&#39;")})'>Edit</button>
+          <button class="btn-ghost btn-sm" onclick="deleteJournalTopic(${t.id})">Delete</button>
+        </div>
+      </div>`).join('') : '<p class="hint">No journal topics yet.</p>';
+  } catch (err) {
+    document.getElementById('journal-list').innerHTML = errorBlock('journal topics', 'loadJournal()');
+    throw err;
+  }
+}
+
+function openJournalModal(topic) {
+  document.getElementById('journal-modal-title').textContent = topic ? 'Edit topic' : 'New topic';
+  document.getElementById('journal-id').value = topic ? topic.id : '';
+  document.getElementById('journal-title').value = topic ? topic.title : '';
+  document.getElementById('journal-description').value = topic ? topic.description || '' : '';
+  document.getElementById('journal-youtube').value = topic ? topic.youtubeUrl || '' : '';
+  document.getElementById('journal-error').style.display = 'none';
+  openModal('journal-modal');
+}
+
+async function submitJournalTopic() {
+  const errEl = document.getElementById('journal-error');
+  try {
+    const id = document.getElementById('journal-id').value;
+    const body = {
+      title: document.getElementById('journal-title').value,
+      description: document.getElementById('journal-description').value,
+      youtubeUrl: document.getElementById('journal-youtube').value
+    };
+    if (id) await apiRequest(`/admin/journal/${id}`, { method: 'PUT', body });
+    else await apiRequest('/admin/journal', { method: 'POST', body });
+    closeModal('journal-modal');
+    await loadJournal();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  }
+}
+
+async function deleteJournalTopic(id) {
+  if (!confirm('Delete this journal topic?')) return;
+  try { await apiRequest(`/admin/journal/${id}`, { method: 'DELETE' }); await loadJournal(); }
   catch (err) { alert(err.message); }
 }
 
