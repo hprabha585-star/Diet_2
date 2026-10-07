@@ -26,6 +26,18 @@ const User = sequelize.define('User', {
   pauseStartedAt: { type: DataTypes.DATE },
   pauseLastResumedAt: { type: DataTypes.DATE },
   pausedDays: { type: DataTypes.INTEGER, defaultValue: 0 },
+  // Who paused it — 'admin' or 'client'. Only the side that paused it may
+  // resume it: a client can't self-unpause a coach-initiated pause, but
+  // can freely unpause one they started themselves.
+  pausedBy: { type: DataTypes.ENUM('admin', 'client'), defaultValue: null },
+
+  // Medical & personal details — filled in by the client themselves, read
+  // by the coach when assigning meals (allergies/conditions shape what's
+  // safe to put on a day's meal plan).
+  medicalConditions: { type: DataTypes.TEXT, defaultValue: '' },
+  allergies: { type: DataTypes.TEXT, defaultValue: '' },
+  medications: { type: DataTypes.TEXT, defaultValue: '' },
+  medicalNotes: { type: DataTypes.TEXT, defaultValue: '' },
 
   // Gamification
   points: { type: DataTypes.INTEGER, defaultValue: 0 },

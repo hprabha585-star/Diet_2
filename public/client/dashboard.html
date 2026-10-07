@@ -25,6 +25,7 @@
       <a href="#chat" class="nav-link" data-view="chat"><span class="ico">✉</span><span>Message coach</span></a>
       <a href="#referral" class="nav-link" data-view="referral"><span class="ico">⇄</span><span>Refer &amp; earn</span></a>
       <a href="/client/tracker.html" class="nav-link" id="nav-tracker"><span class="ico">◔</span><span>Fasting Tracker</span><span class="nav-lock" id="nav-tracker-lock">🔒</span></a>
+      <a href="#medical" class="nav-link" data-view="medical"><span class="ico">✚</span><span>Medical &amp; personal details</span></a>
       <a href="#contact" class="nav-link" data-view="contact"><span class="ico">☎</span><span>Contact us</span></a>
       <a href="#payment" class="nav-link" data-view="payment"><span class="ico">₹</span><span>Payment</span></a>
     </nav>
@@ -97,7 +98,8 @@
             <div id="pause-active" style="display:none;">
               <span class="badge badge-pending">Paused</span>
               <span id="pause-reason-text" class="small muted" style="margin-left:8px;"></span>
-              <button class="btn btn-primary btn-sm" style="margin-left:12px;" onclick="resumeFasting()">Resume</button>
+              <button class="btn btn-primary btn-sm" id="pause-resume-btn" style="margin-left:12px;" onclick="resumeFasting()">Resume</button>
+              <span id="pause-admin-note" class="small muted" style="margin-left:8px;display:none;">Paused by your coach — message them to resume.</span>
             </div>
           </div>
 
@@ -204,6 +206,20 @@
       <div class="view" id="view-referral"><div class="card" id="referral-card"></div></div>
 
       <!-- CONTACT -->
+      <!-- MEDICAL & PERSONAL DETAILS -->
+      <div class="view" id="view-medical">
+        <div class="page-intro"><h2>Medical &amp; personal details</h2><p class="hint">Tell your coach about any conditions, allergies, or medications — they'll take this into account when assigning your meals. Only your coach can see this.</p></div>
+        <div class="card">
+          <div class="field"><label>Medical conditions</label><textarea id="medical-conditions" rows="3" placeholder="e.g. Type 2 diabetes, thyroid, PCOS…"></textarea></div>
+          <div class="field"><label>Allergies</label><textarea id="medical-allergies" rows="2" placeholder="e.g. peanuts, dairy, gluten…"></textarea></div>
+          <div class="field"><label>Current medications</label><textarea id="medical-medications" rows="2" placeholder="e.g. metformin, thyroid medication…"></textarea></div>
+          <div class="field"><label>Anything else your coach should know</label><textarea id="medical-notes" rows="3"></textarea></div>
+          <div class="success-text" id="medical-success" style="display:none;">Saved.</div>
+          <div class="error-text" id="medical-error" style="display:none;"></div>
+          <button class="btn btn-primary btn-sm" onclick="saveMedicalDetails()">Save</button>
+        </div>
+      </div>
+
       <div class="view" id="view-contact"><div class="card" id="contact-card"></div></div>
 
       <!-- PAYMENT -->

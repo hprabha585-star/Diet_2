@@ -92,7 +92,8 @@ function renderRoster() {
         <div class="roster-avatar">${esc(c.name.slice(0, 1).toUpperCase())}</div>
         <div style="min-width:0;">
           <div class="roster-name">${esc(c.name)} ${c.planMode === 'tracker' ? '<span class="badge badge-active" style="margin-left:6px;">Tracker</span>' : ''}</div>
-          <div class="roster-meta">${esc(c.email)} · <span class="badge badge-${c.status === 'active' ? 'active' : c.status === 'pending_payment' ? 'pending' : 'rejected'}">${esc(c.status)}</span>${c.fastingPause.active ? ' · Paused' : ''}</div>
+          <div class="roster-meta">${esc(c.email)} · <span class="badge badge-${c.status === 'active' ? 'active' : c.status === 'pending_payment' ? 'pending' : 'rejected'}">${esc(c.status)}</span>${c.fastingPause.active ? ` · Paused${c.fastingPause.pausedBy === 'admin' ? ' (by coach)' : ' (self)'}` : ''}${c.expired ? ' · <span class="badge badge-rejected">Expired</span>' : ''}</div>
+          ${c.challengeLengthDays ? `<div class="roster-meta">Plan: ${c.challengeLengthDays}-day${c.daysLeft !== null ? ` · ${c.daysLeft} day${c.daysLeft === 1 ? '' : 's'} left` : ''}${c.dueDate ? ` · valid through ${c.dueDate}` : ''}</div>` : ''}
         </div>
       </div>
       <div class="roster-stats">
@@ -108,8 +109,9 @@ function renderRoster() {
             ${c.planMode === 'protocol' ? `<button onclick="openAssignPlanModal(${c.id}, '${jsStr(c.name)}', ${c.day || 1})">Assign plan</button>` : ''}
             ${c.planMode === 'protocol' ? `<button onclick="openProgramGuideModal(${c.id}, '${jsStr(c.name)}')">Program guide</button>` : ''}
             <button onclick="openAdminPauseModal(${c.id}, ${c.fastingPause.active})">${c.fastingPause.active ? 'Resume fasting' : 'Pause fasting'}</button>
-            <button onclick="openClientDetail(${c.id})">View details &amp; BMI</button>
+            <button onclick="openClientDetail(${c.id})">View details, BMI &amp; medical notes</button>
             <button onclick="openResetPasswordModal(${c.id})">Reset password</button>
+            <button onclick="deleteClient(${c.id}, '${jsStr(c.name)}')" style="color:#B23B3B;">Delete client</button>
           </div>
         </div>
       </div>
@@ -151,6 +153,18 @@ document.addEventListener('click', (e) => {
 
 async function activateClient(id) {
   try { await apiRequest(`/admin/clients/${id}/activate`, { method: 'POST' }); await loadRoster(); }
+  catch (err) { alert(err.message); }
+}
+
+// Permanently removes a client and everything attached to them (weight
+// logs, regimens, payments, messages...). There's no undo, so this asks
+// for the name to be typed back — a plain confirm() is too easy to click
+// through by habit for something this destructive.
+async function deleteClient(id, name) {
+  const typed = prompt(`This permanently deletes ${name} and all their data (weight logs, payments, messages, everything). This cannot be undone.\n\nType the client's name to confirm:`);
+  if (typed === null) return;
+  if (typed.trim().toLowerCase() !== name.trim().toLowerCase()) { alert('Name didn\'t match — nothing was deleted.'); return; }
+  try { await apiRequest(`/admin/clients/${id}`, { method: 'DELETE' }); await loadRoster(); }
   catch (err) { alert(err.message); }
 }
 
@@ -1311,7 +1325,17 @@ async function openClientDetail(id) {
         <div class="detail-cell"><span>Plan</span><b>${esc(c.tier || '—')} · ${esc(c.planMode)}</b></div>
         <div class="detail-cell"><span>Day</span><b>${c.challengeStartDate ? `${d.checklistLogs.length ? '' : ''}${c.challengeLengthDays} day programme` : 'Not started'}</b></div>
         <div class="detail-cell"><span>Points</span><b>${c.points} · streak ${c.streakCurrent}</b></div>
+        ${d.validity ? `<div class="detail-cell"><span>Validity</span><b>${d.validity.expired ? 'Expired' : `${d.validity.daysLeft} day${d.validity.daysLeft === 1 ? '' : 's'} left`}${d.validity.dueDate ? ` (through ${d.validity.dueDate})` : ''}</b></div>` : ''}
       </div>
+
+      <h4 class="detail-head">Medical &amp; personal details <span class="hint">(filled in by the client)</span></h4>
+      ${(d.medical && (d.medical.medicalConditions || d.medical.allergies || d.medical.medications || d.medical.medicalNotes)) ? `
+        <div class="detail-grid">
+          <div class="detail-cell"><span>Conditions</span><b>${esc(d.medical.medicalConditions || '—')}</b></div>
+          <div class="detail-cell"><span>Allergies</span><b>${esc(d.medical.allergies || '—')}</b></div>
+          <div class="detail-cell"><span>Medications</span><b>${esc(d.medical.medications || '—')}</b></div>
+          <div class="detail-cell"><span>Other notes</span><b>${esc(d.medical.medicalNotes || '—')}</b></div>
+        </div>` : '<p class="hint">Nothing filled in yet — ask the client to fill this in from their Profile.</p>'}
 
       <h4 class="detail-head">Body metrics</h4>
       ${b.heightCm || b.currentWeightKg ? `

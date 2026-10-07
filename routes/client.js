@@ -131,7 +131,7 @@ router.get('/dashboard', requireActive, async (req, res) => {
     challengeLengthDays: user.challengeLengthDays,
     daysLeft: user.daysLeft(),
     dueDate: user.dueDate(),
-    fastingPause: { active: user.pauseActive, reason: user.pauseReason },
+    fastingPause: { active: user.pauseActive, reason: user.pauseReason, pausedBy: user.pausedBy },
     // Only raw window data goes to the client — it computes fasting/eating
     // state and the countdown itself in the browser's local time, so the
     // number is always correct regardless of the server's timezone.
@@ -308,12 +308,21 @@ router.post('/fasting/pause', requireActive, async (req, res) => {
   user.pauseActive = true;
   user.pauseReason = req.body.reason || '';
   user.pauseStartedAt = new Date();
+  // Marks this as a SELF-initiated pause, so the client (and only the
+  // client, see /fasting/resume below) can resume it.
+  user.pausedBy = 'client';
   await user.save();
-  res.json({ fastingPause: { active: true, reason: user.pauseReason }, day: user.currentChallengeDay() });
+  res.json({ fastingPause: { active: true, reason: user.pauseReason, pausedBy: 'client' }, day: user.currentChallengeDay() });
 });
 
 router.post('/fasting/resume', requireActive, async (req, res) => {
   const user = req.user;
+  // A coach-initiated pause can only be lifted by the coach — otherwise a
+  // client could simply undo a pause their coach set for a reason (e.g.
+  // an injury, a medical hold) that the client disagrees with.
+  if (user.pauseActive && user.pausedBy === 'admin') {
+    return res.status(403).json({ error: 'Your coach paused this — only your coach can resume it. Message your coach to ask.' });
+  }
   if (user.pauseActive && user.pauseStartedAt) {
     const start = new Date(user.pauseStartedAt);
     const now = new Date();
@@ -324,6 +333,7 @@ router.post('/fasting/resume', requireActive, async (req, res) => {
   }
   user.pauseActive = false;
   user.pauseReason = '';
+  user.pausedBy = null;
   user.pauseLastResumedAt = new Date();
   await user.save();
   res.json({ fastingPause: { active: false }, pausedDays: user.pausedDays, day: user.currentChallengeDay() });
@@ -377,6 +387,33 @@ router.post('/profile', requireActive, async (req, res) => {
     res.json({ user: req.user.toSafeJSON() });
   } catch (err) {
     res.status(500).json({ error: 'Could not save profile', detail: err.message });
+  }
+});
+
+// Medical & personal details — the client's own words on any conditions,
+// allergies or medications, so the coach can take them into account when
+// assigning meals. Free text, filled in and updated by the client only.
+router.get('/medical', requireActive, async (req, res) => {
+  const u = req.user;
+  res.json({
+    medicalConditions: u.medicalConditions || '',
+    allergies: u.allergies || '',
+    medications: u.medications || '',
+    medicalNotes: u.medicalNotes || ''
+  });
+});
+
+router.post('/medical', requireActive, async (req, res) => {
+  try {
+    const { medicalConditions, allergies, medications, medicalNotes } = req.body;
+    if (typeof medicalConditions === 'string') req.user.medicalConditions = medicalConditions;
+    if (typeof allergies === 'string') req.user.allergies = allergies;
+    if (typeof medications === 'string') req.user.medications = medications;
+    if (typeof medicalNotes === 'string') req.user.medicalNotes = medicalNotes;
+    await req.user.save();
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not save medical details', detail: err.message });
   }
 });
 

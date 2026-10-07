@@ -74,8 +74,12 @@ router.get('/clients', async (req, res) => {
       id: c.id, name: c.name, email: c.email, phone: c.phone,
       status: c.status, planMode: c.planMode, tier: c.tier,
       timezone: c.timezone, day, challengeLengthDays: c.challengeLengthDays,
+      // Plan duration/validity, so the coach can see at a glance how long
+      // this client's plan runs and how much of it is left, without
+      // opening their detail card.
+      daysLeft: c.daysLeft(), dueDate: c.dueDate(), expired: c.isExpired(),
       points: c.points, streakCurrent: c.streakCurrent,
-      fastingPause: { active: c.pauseActive, reason: c.pauseReason },
+      fastingPause: { active: c.pauseActive, reason: c.pauseReason, pausedBy: c.pausedBy },
       window: regimen ? { startHour: regimen.startHour, endHour: regimen.endHour, isFullDayFast: regimen.isFullDayFast } : null,
       completionPercent
     };
@@ -103,8 +107,27 @@ router.get('/clients/:id', async (req, res) => {
       currentWeightKg: latest, startWeightKg: first,
       changeKg: latest !== null && first !== null ? Math.round((latest - first) * 10) / 10 : null,
       bmi: client.bmi(latest), healthyWeightRange: client.healthyWeightRange()
+    },
+    validity: { daysLeft: client.daysLeft(), dueDate: client.dueDate(), expired: client.isExpired() },
+    // Medical & personal details — filled in by the client themselves,
+    // read-only here so the coach can factor it into meal assignment.
+    medical: {
+      medicalConditions: client.medicalConditions || '',
+      allergies: client.allergies || '',
+      medications: client.medications || '',
+      medicalNotes: client.medicalNotes || ''
     }
   });
+});
+
+// DELETE /api/admin/clients/:id — permanently removes a client and every
+// row that belongs to them (weight logs, regimens, payments, etc. all
+// cascade via each model's onDelete: 'CASCADE' association).
+router.delete('/clients/:id', async (req, res) => {
+  const client = await User.findOne({ where: { id: req.params.id, role: 'client' } });
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  await client.destroy();
+  res.json({ ok: true });
 });
 
 router.post('/clients/:id/activate', async (req, res) => {
@@ -134,6 +157,9 @@ router.post('/clients/:id/pause', async (req, res) => {
     client.pauseActive = true;
     client.pauseReason = reason || '';
     client.pauseStartedAt = new Date();
+    // Marks this as a COACH-initiated pause — the client can see it but
+    // can't resume it themselves (see routes/client.js fasting/resume).
+    client.pausedBy = 'admin';
   } else {
     if (client.pauseActive && client.pauseStartedAt) {
       const start = new Date(client.pauseStartedAt);
@@ -144,6 +170,7 @@ router.post('/clients/:id/pause', async (req, res) => {
     }
     client.pauseActive = false;
     client.pauseReason = '';
+    client.pausedBy = null;
   }
   await client.save();
   res.json({ client: client.toSafeJSON() });

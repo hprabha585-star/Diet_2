@@ -71,6 +71,7 @@ function showView(view) {
   if (view === 'chat') loadChat();
   if (view === 'history') loadHistoryPage();
   if (view === 'guide') { loadProgramGuide(); loadJournalTopics(); }
+  if (view === 'medical') loadMedicalDetails();
   if (view === 'leaderboard') loadClientLeaderboard();
   if (view === 'alerts') markAlertsRead();
 }
@@ -136,6 +137,42 @@ async function loadJournalTopics() {
       </div>`).join('') : '<p class="hint">No journal topics yet.</p>';
   } catch (err) {
     el.innerHTML = `<p class="hint">${esc(err.message)}</p>`;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Medical & personal details — the client's own words on conditions,  */
+/* allergies and medications, read by the coach when assigning meals.   */
+/* ------------------------------------------------------------------ */
+async function loadMedicalDetails() {
+  try {
+    const m = await apiRequest('/client/medical');
+    document.getElementById('medical-conditions').value = m.medicalConditions || '';
+    document.getElementById('medical-allergies').value = m.allergies || '';
+    document.getElementById('medical-medications').value = m.medications || '';
+    document.getElementById('medical-notes').value = m.medicalNotes || '';
+  } catch (err) { /* leave fields blank — not fatal */ }
+}
+
+async function saveMedicalDetails() {
+  const errEl = document.getElementById('medical-error');
+  const okEl = document.getElementById('medical-success');
+  errEl.style.display = 'none';
+  okEl.style.display = 'none';
+  try {
+    await apiRequest('/client/medical', {
+      method: 'POST',
+      body: {
+        medicalConditions: document.getElementById('medical-conditions').value,
+        allergies: document.getElementById('medical-allergies').value,
+        medications: document.getElementById('medical-medications').value,
+        medicalNotes: document.getElementById('medical-notes').value
+      }
+    });
+    okEl.style.display = 'block';
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
   }
 }
 
@@ -321,7 +358,15 @@ function renderProtocolToday() {
   const paused = dashboardData.fastingPause.active;
   document.getElementById('pause-inactive').style.display = paused ? 'none' : 'block';
   document.getElementById('pause-active').style.display = paused ? 'block' : 'none';
-  if (paused) document.getElementById('pause-reason-text').textContent = dashboardData.fastingPause.reason || '';
+  if (paused) {
+    document.getElementById('pause-reason-text').textContent = dashboardData.fastingPause.reason || '';
+    // A coach-initiated pause can only be lifted by the coach — hide the
+    // Resume button entirely rather than let the client tap it and hit a
+    // 403, which just looks broken.
+    const pausedByAdmin = dashboardData.fastingPause.pausedBy === 'admin';
+    document.getElementById('pause-resume-btn').style.display = pausedByAdmin ? 'none' : 'inline-block';
+    document.getElementById('pause-admin-note').style.display = pausedByAdmin ? 'inline' : 'none';
+  }
 
   renderChecklist();
   renderWater();
