@@ -59,10 +59,10 @@ const User = sequelize.define('User', {
   // Self-guided tracker: daily water goal (only meaningful for planMode='tracker')
   waterGoalMl: { type: DataTypes.INTEGER, defaultValue: 3000 },
 
-  // Set true the first time a payment for a non-trial plan is approved
-  // for this client, and never cleared after. Used to hide trial/intro
-  // plans from someone who has already bought in at a paid tier, so a
-  // paying client is never shown what looks like a downgrade option.
+  // Set true the first time ANY payment is approved for this client
+  // (trial or paid), and never cleared after. Used to hide free/trial
+  // plans from an already-enrolled client, so only a brand-new signup
+  // ever sees the free/trial options (see GET /client/plans).
   hadPaidPlan: { type: DataTypes.BOOLEAN, defaultValue: false }
 });
 
@@ -380,6 +380,27 @@ const JournalTopic = sequelize.define('JournalTopic', {
   active: { type: DataTypes.BOOLEAN, defaultValue: true }
 });
 
+/* ------------------------------------------------------------------ */
+/* Achievement — earned badges shown on the client's "Your Achievements" */
+/* page. Awarded automatically (a completed 24h+ fast, whether from a   */
+/* coach-assigned full-day-fast protocol day or a self-guided Fasting   */
+/* Tracker session) — never created directly by a client.               */
+/* ------------------------------------------------------------------ */
+const Achievement = sequelize.define('Achievement', {
+  type: { type: DataTypes.STRING, allowNull: false },     // e.g. 'fast_24h'
+  title: { type: DataTypes.STRING, allowNull: false },
+  description: { type: DataTypes.STRING },
+  hours: { type: DataTypes.FLOAT },                        // fast length, if applicable
+  earnedAt: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+  // Dedupe key (e.g. "day-12" or a tracker session id) so the same
+  // protocol day or tracker session can never award the same badge twice.
+  dedupeKey: { type: DataTypes.STRING, allowNull: false }
+}, {
+  indexes: [{ unique: true, fields: ['user_id', 'type', 'dedupe_key'] }]
+});
+User.hasMany(Achievement, { foreignKey: 'userId', onDelete: 'CASCADE' });
+Achievement.belongsTo(User, { foreignKey: 'userId' });
+
 const Settings = sequelize.define('Settings', {
   singleton: { type: DataTypes.STRING, defaultValue: 'main', unique: true },
   coachName: { type: DataTypes.STRING, defaultValue: '' },
@@ -545,6 +566,6 @@ module.exports = {
   sequelize, User, WeightLog, Plan, Payment, Payout,
   Regimen, RegimenMeal, RegimenMilestone,
   ChecklistLog, ChecklistItem, WaterEntry,
-  Alert, AlertRead, Message, Settings, ProtocolDay, JournalTopic,
+  Alert, AlertRead, Message, Settings, ProtocolDay, JournalTopic, Achievement,
   TrackerSession, TrackerWaterEntry, TrackerProfile, MealEntry, RestDay, TrackerTaskLog
 };

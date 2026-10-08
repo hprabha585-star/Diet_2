@@ -21,6 +21,8 @@
       <a href="#today" class="nav-link active" data-view="today"><span class="ico">☉</span><span>Today</span></a>
       <a href="#history" class="nav-link" data-view="history"><span class="ico">☷</span><span>History &amp; weight</span></a>
       <a href="#guide" class="nav-link" data-view="guide"><span class="ico">✎</span><span>Program guide</span></a>
+      <a href="#journal" class="nav-link" data-view="journal"><span class="ico">📓</span><span>SVR Journal</span></a>
+      <a href="#achievements" class="nav-link" data-view="achievements"><span class="ico">🏆</span><span>Your Achievements</span></a>
       <a href="#leaderboard" class="nav-link" data-view="leaderboard"><span class="ico">★</span><span>Leaderboard</span></a>
       <a href="#chat" class="nav-link" data-view="chat"><span class="ico">✉</span><span>Message coach</span></a>
       <a href="#referral" class="nav-link" data-view="referral"><span class="ico">⇄</span><span>Refer &amp; earn</span></a>
@@ -170,9 +172,18 @@
       <div class="view" id="view-guide">
         <div class="page-intro"><h2>Program guide</h2><p class="hint">What your coach has planned for each day.</p></div>
         <div id="guide-list"><p class="hint">Loading…</p></div>
+      </div>
 
-        <div class="section-subtitle" style="margin-top:24px;">SVR Journal / Personal Notes</div>
+      <!-- SVR JOURNAL / PERSONAL NOTES — own page, visible to every client -->
+      <div class="view" id="view-journal">
+        <div class="page-intro"><h2>SVR Journal / Personal Notes</h2><p class="hint">Topics your coach has written for you, with video links where there are any.</p></div>
         <div id="journal-list"><p class="hint">Loading…</p></div>
+      </div>
+
+      <!-- YOUR ACHIEVEMENTS — badges earned from completed fasts -->
+      <div class="view" id="view-achievements">
+        <div class="page-intro"><h2>Your Achievements</h2><p class="hint">Badges earned from completed fasts — including any 24-hour+ fast, coach-assigned or self-guided.</p></div>
+        <div id="achievements-list"><p class="hint">Loading…</p></div>
       </div>
 
       <!-- LEADERBOARD -->

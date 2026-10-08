@@ -55,7 +55,17 @@ function formatTodayHeading() {
 // lives behind the topbar bell, not the sidebar) still need a title.
 const VIEW_TITLES = { alerts: 'Alerts' };
 
+// Once a protocol client's plan has expired, the whole app is locked
+// except for these — same thing the backend enforces per-route (see
+// requireActive's allowExpired option in routes/client.js). Blocking it
+// here too means tapping a nav link just shows the renew screen instead
+// of a view that quietly 403s on every request it tries to make.
+const ALLOWED_WHEN_EXPIRED = ['today', 'payment', 'contact', 'chat', 'alerts'];
+
 function showView(view) {
+  if (dashboardData && dashboardData.expired && !ALLOWED_WHEN_EXPIRED.includes(view)) {
+    view = 'today';
+  }
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-link').forEach(a => a.classList.remove('active'));
   const viewEl = document.getElementById(`view-${view}`);
@@ -70,7 +80,9 @@ function showView(view) {
   closeSidebar();
   if (view === 'chat') loadChat();
   if (view === 'history') loadHistoryPage();
-  if (view === 'guide') { loadProgramGuide(); loadJournalTopics(); }
+  if (view === 'guide') loadProgramGuide();
+  if (view === 'journal') loadJournalTopics();
+  if (view === 'achievements') loadAchievements();
   if (view === 'medical') loadMedicalDetails();
   if (view === 'leaderboard') loadClientLeaderboard();
   if (view === 'alerts') markAlertsRead();
@@ -173,6 +185,26 @@ async function saveMedicalDetails() {
   } catch (err) {
     errEl.textContent = err.message;
     errEl.style.display = 'block';
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Your Achievements — badges earned from completed 24h+ fasts          */
+/* ------------------------------------------------------------------ */
+async function loadAchievements() {
+  const el = document.getElementById('achievements-list');
+  try {
+    const data = await apiRequest('/client/achievements');
+    el.innerHTML = data.achievements.length ? `<div class="achievement-grid">${data.achievements.map(a => `
+      <div class="card achievement-card">
+        <div style="font-size:28px;">🏆</div>
+        <div style="font-weight:600;margin-top:6px;">${esc(a.title)}</div>
+        ${a.description ? `<p class="hint" style="margin-top:4px;">${esc(a.description)}</p>` : ''}
+        <div class="hint" style="margin-top:6px;">${new Date(a.earnedAt).toLocaleDateString()}</div>
+      </div>`).join('')}</div>`
+      : '<p class="hint">No achievements yet — complete a 24-hour+ fast to earn your first badge.</p>';
+  } catch (err) {
+    el.innerHTML = `<p class="hint">${esc(err.message)}</p>`;
   }
 }
 

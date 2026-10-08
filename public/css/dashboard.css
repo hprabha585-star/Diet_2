@@ -626,6 +626,8 @@
 .assign-status .btn-ghost { text-decoration: underline; padding: 0 2px; }
 
 /* ---- Client detail drawer ---- */
+.achievement-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }
+.achievement-card { text-align: center; }
 .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
 .detail-cell {
   background: var(--paper); border: 1px solid var(--line);

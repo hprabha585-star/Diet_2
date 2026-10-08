@@ -781,6 +781,16 @@ async function loadProgramGuideEditor(clientId) {
     el.innerHTML = data.days.map(d => `
       <div class="guide-editor-row ${d.day === data.currentDay ? 'current-day' : ''}">
         <div class="guide-editor-day">Day ${d.day}${d.day === data.currentDay ? ' <span class="badge badge-active">Today</span>' : ''}</div>
+        <label class="check-line" style="margin-bottom:6px;">
+          <input type="checkbox" id="guide-fullfast-${d.day}" ${d.isFullDayFast ? 'checked' : ''}
+            onchange="toggleGuideFullFast(${clientId}, ${d.day}, this.checked)"> Full-day fast (24h, no eating window)
+        </label>
+        <div class="guide-window-row" id="guide-window-${d.day}" style="display:${d.isFullDayFast ? 'none' : 'flex'};gap:8px;margin-bottom:8px;">
+          <div class="field" style="flex:1;margin:0;"><label>Eating window start (24h)</label>
+            <input type="number" step="0.5" id="guide-start-${d.day}" value="${d.startHour}" onblur="saveDayWindow(${clientId}, ${d.day})"></div>
+          <div class="field" style="flex:1;margin:0;"><label>Eating window end (24h)</label>
+            <input type="number" step="0.5" id="guide-end-${d.day}" value="${d.endHour}" onblur="saveDayWindow(${clientId}, ${d.day})"></div>
+        </div>
         <textarea placeholder="What's this day about?"
           onblur="saveDayFocus(${clientId}, ${d.day}, this.value)">${esc(d.focus || '')}</textarea>
       </div>`).join('');
@@ -811,6 +821,27 @@ async function saveDayFocus(clientId, day, focus) {
   try {
     await apiRequest(`/admin/clients/${clientId}/regimen/${day}/focus`, { method: 'PATCH', body: { focus } });
   } catch (err) { alert(`Could not save day ${day}: ${err.message}`); }
+}
+
+function toggleGuideFullFast(clientId, day, checked) {
+  const row = document.getElementById(`guide-window-${day}`);
+  if (row) row.style.display = checked ? 'none' : '';
+  saveDayWindow(clientId, day);
+}
+
+async function saveDayWindow(clientId, day) {
+  const fullFastEl = document.getElementById(`guide-fullfast-${day}`);
+  const startEl = document.getElementById(`guide-start-${day}`);
+  const endEl = document.getElementById(`guide-end-${day}`);
+  const isFullDayFast = fullFastEl ? !!fullFastEl.checked : false;
+  const startHour = startEl ? Number(startEl.value) : undefined;
+  const endHour = endEl ? Number(endEl.value) : undefined;
+  try {
+    await apiRequest(`/admin/clients/${clientId}/regimen/${day}/focus`, {
+      method: 'PATCH',
+      body: { isFullDayFast, startHour, endHour }
+    });
+  } catch (err) { alert(`Could not save day ${day} window: ${err.message}`); }
 }
 
 /* ------------------------------------------------------------------ */

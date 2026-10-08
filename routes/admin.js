@@ -347,21 +347,28 @@ router.get('/clients/:id/program-guide', async (req, res) => {
   if (!client) return res.status(404).json({ error: 'Client not found' });
   const regimens = await Regimen.findAll({
     where: { userId: client.id }, order: [['day', 'ASC']],
-    attributes: ['day', 'phase', 'focus', 'protocolType', 'updatedAt']
+    attributes: ['day', 'phase', 'focus', 'protocolType', 'updatedAt', 'startHour', 'endHour', 'isFullDayFast']
   });
   const byDay = new Map(regimens.map(r => [r.day, r]));
   const days = [];
   for (let d = 1; d <= client.challengeLengthDays; d++) {
     const r = byDay.get(d);
-    days.push({ day: d, phase: r ? r.phase : '', focus: r ? r.focus : '', assigned: !!r });
+    days.push({
+      day: d, phase: r ? r.phase : '', focus: r ? r.focus : '', assigned: !!r,
+      startHour: r ? r.startHour : 9, endHour: r ? r.endHour : 17,
+      isFullDayFast: r ? r.isFullDayFast : false
+    });
   }
   res.json({ days, currentDay: client.currentChallengeDay() });
 });
 
-// PATCH /api/admin/clients/:id/regimen/:day/focus — quick edit of just the
-// day-info text, without touching that day's meals/habits/window. Creates
-// the day (with sane window defaults) if it doesn't exist yet, so the
-// coach can write the story of the programme ahead of assigning meals.
+// PATCH /api/admin/clients/:id/regimen/:day/focus — quick edit of the
+// day-info text AND (now) the Eating/Fasting window, without touching
+// that day's meals/habits. Creates the day (with sane window defaults)
+// if it doesn't exist yet, so the coach can write the story of the
+// programme — and set its window — ahead of assigning meals. This is
+// the Program Guide editor's save call; Assign Plan's own fuller form
+// still covers meals/habits.
 router.patch('/clients/:id/regimen/:day/focus', async (req, res) => {
   try {
     const client = await User.findOne({ where: { id: req.params.id, role: 'client' } });
@@ -376,8 +383,14 @@ router.patch('/clients/:id/regimen/:day/focus', async (req, res) => {
     });
     regimen.focus = typeof req.body.focus === 'string' ? req.body.focus : regimen.focus;
     if (typeof req.body.phase === 'string') regimen.phase = req.body.phase;
+    if (typeof req.body.isFullDayFast === 'boolean') regimen.isFullDayFast = req.body.isFullDayFast;
+    if (typeof req.body.startHour === 'number') regimen.startHour = req.body.startHour;
+    if (typeof req.body.endHour === 'number') regimen.endHour = req.body.endHour;
     await regimen.save();
-    res.json({ day: regimen.day, focus: regimen.focus, phase: regimen.phase });
+    res.json({
+      day: regimen.day, focus: regimen.focus, phase: regimen.phase,
+      startHour: regimen.startHour, endHour: regimen.endHour, isFullDayFast: regimen.isFullDayFast
+    });
   } catch (err) {
     res.status(500).json({ error: 'Could not save day info', detail: err.message });
   }
@@ -598,11 +611,11 @@ router.post('/payments/:id/approve', async (req, res) => {
     client.planMode = plan ? plan.mode : 'protocol';
     client.challengeStartDate = new Date().toISOString().slice(0, 10);
     client.challengeLengthDays = plan ? plan.durationDays : 55;
-    // Once a client has paid for any non-trial plan, trial/intro plans
-    // stay hidden from them from now on (see GET /client/plans) — even if
-    // they later re-subscribe to another trial by mistake, this flag is
-    // never cleared.
-    if (plan && !plan.isTrial) client.hadPaidPlan = true;
+    // Once a client has ANY approved payment — trial or paid — free/trial
+    // plans stay hidden from them from now on (see GET /client/plans):
+    // only a brand-new signup who has never enrolled in anything sees
+    // the free/trial options. This flag is never cleared.
+    client.hadPaidPlan = true;
     await client.save();
 
     // First-ever approved payment triggers the referral reward.

@@ -3,7 +3,7 @@ const {
   User, WeightLog, Plan, Payment, Payout,
   Regimen, RegimenMeal, RegimenMilestone,
   ChecklistLog, ChecklistItem, WaterEntry,
-  Alert, AlertRead, Message, Settings, TrackerSession, TrackerWaterEntry, JournalTopic
+  Alert, AlertRead, Message, Settings, TrackerSession, TrackerWaterEntry, JournalTopic, Achievement
 } = require('../models');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { buildChecklistItems } = require('../utils/helpers');
@@ -17,11 +17,23 @@ router.use(requireAuth, requireRole('client'));
 // Everything except payment status, contact, and chat is locked until the
 // coach approves the client's payment. The API refuses these routes itself
 // rather than relying on the UI to hide them.
-function requireActive(req, res, next) {
-  if (req.user.status !== 'active' && req.user.status !== 'paused') {
-    return res.status(403).json({ error: 'Your account is not active yet. Please complete payment and wait for coach approval.' });
-  }
-  next();
+//
+// Once a protocol client's plan VALIDITY runs out, the same lock applies
+// app-wide — not just the dashboard's own checklist/window — so a client
+// can't keep ticking off meals, logging weight, messaging, etc. on an
+// expired plan. Dashboard and Alerts opt out of the expiry half of this
+// (pass { allowExpired: true }) because they're what SHOW the client why
+// they're locked and let the alert's unread badge clear.
+function requireActive(opts = {}) {
+  return (req, res, next) => {
+    if (req.user.status !== 'active' && req.user.status !== 'paused') {
+      return res.status(403).json({ error: 'Your account is not active yet. Please complete payment and wait for coach approval.' });
+    }
+    if (!opts.allowExpired && req.user.planMode === 'protocol' && req.user.isExpired()) {
+      return res.status(403).json({ error: 'Your plan has expired. Renew from the Payment page to continue.', expired: true });
+    }
+    next();
+  };
 }
 
 // Fires a one-time "your plan expired" alert the first time a protocol
@@ -38,6 +50,17 @@ async function maybeRaiseExpiryAlert(user) {
     userId: user.id, title,
     body: `Your plan validity ended on ${dueDate}. Renew to keep access to your dashboard, coach chat and tracking.`,
     level: 'important'
+  });
+}
+
+// Awards (or no-ops if already awarded) a 24-hour+ fast badge. `dedupeKey`
+// is unique per (user, type) so the same protocol day or tracker session
+// can never double-award — findOrCreate just quietly does nothing on a
+// repeat call instead of needing a separate "already have it?" check.
+async function awardAchievement(userId, type, title, description, hours, dedupeKey) {
+  await Achievement.findOrCreate({
+    where: { userId, type, dedupeKey },
+    defaults: { userId, type, title, description, hours }
   });
 }
 
@@ -85,7 +108,7 @@ async function syncChecklistWithRegimen(user, day) {
 /* ------------------------------------------------------------------ */
 /* Dashboard                                                            */
 /* ------------------------------------------------------------------ */
-router.get('/dashboard', requireActive, async (req, res) => {
+router.get('/dashboard', requireActive({ allowExpired: true }), async (req, res) => {
   const user = req.user;
 
   if (user.planMode === 'tracker') {
@@ -166,7 +189,7 @@ router.get('/dashboard', requireActive, async (req, res) => {
 /* ------------------------------------------------------------------ */
 
 // POST /client/checklist  { itemId, done }  — toggle any item (coach or custom)
-router.post('/checklist', requireActive, async (req, res) => {
+router.post('/checklist', requireActive(), async (req, res) => {
   try {
     const { itemId, done } = req.body;
     const item = await ChecklistItem.findByPk(itemId, { include: [{ model: ChecklistLog }] });
@@ -182,6 +205,20 @@ router.post('/checklist', requireActive, async (req, res) => {
     // `+= 100` anywhere: the day is either qualifying or it isn't, and
     // the totals always match the rows.
     const score = await applyScoring(req.user, day);
+    const justCompleted = score.qualifies && !wasScored;
+
+    // A coach-assigned full-day-fast day that just got ticked past the
+    // completion threshold earns a 24-hour fast badge — same achievement
+    // a self-guided Fasting Tracker session earns (see /tracker/stop).
+    if (justCompleted) {
+      const regimen = await Regimen.findOne({ where: { userId: req.user.id, day } });
+      if (regimen && regimen.isFullDayFast) {
+        await awardAchievement(
+          req.user.id, 'fast_24h', '24-Hour Fast Completed',
+          `Day ${day} of your programme — a full 24-hour fast.`, 24, `protocol-day-${day}`
+        );
+      }
+    }
 
     res.json({
       item,
@@ -191,7 +228,7 @@ router.post('/checklist', requireActive, async (req, res) => {
       threshold: COMPLETION_THRESHOLD,
       pointsPerDay: POINTS_PER_DAY,
       dayScored: score.qualifies,
-      awardedPoints: score.qualifies && !wasScored,   // just crossed the line
+      awardedPoints: justCompleted,   // just crossed the line
       revokedPoints: !score.qualifies && wasScored,   // just dropped back under it
       points: score.points,
       streakCurrent: score.streakCurrent,
@@ -203,7 +240,7 @@ router.post('/checklist', requireActive, async (req, res) => {
 });
 
 // POST /client/checklist/items  — add a custom habit or meal (never scored)
-router.post('/checklist/items', requireActive, async (req, res) => {
+router.post('/checklist/items', requireActive(), async (req, res) => {
   try {
     const { label, kind } = req.body;
     if (!label) return res.status(400).json({ error: 'Label is required' });
@@ -222,7 +259,7 @@ router.post('/checklist/items', requireActive, async (req, res) => {
 });
 
 // PATCH /client/checklist/items/:id  { label }  — rename; CUSTOM ITEMS ONLY
-router.patch('/checklist/items/:id', requireActive, async (req, res) => {
+router.patch('/checklist/items/:id', requireActive(), async (req, res) => {
   try {
     const item = await ChecklistItem.findByPk(req.params.id, { include: [{ model: ChecklistLog }] });
     if (!item || item.ChecklistLog.userId !== req.user.id) return res.status(404).json({ error: 'Item not found' });
@@ -237,7 +274,7 @@ router.patch('/checklist/items/:id', requireActive, async (req, res) => {
 });
 
 // DELETE /client/checklist/items/:id  — CUSTOM ITEMS ONLY
-router.delete('/checklist/items/:id', requireActive, async (req, res) => {
+router.delete('/checklist/items/:id', requireActive(), async (req, res) => {
   try {
     const item = await ChecklistItem.findByPk(req.params.id, { include: [{ model: ChecklistLog }] });
     if (!item || item.ChecklistLog.userId !== req.user.id) return res.status(404).json({ error: 'Item not found' });
@@ -253,7 +290,7 @@ router.delete('/checklist/items/:id', requireActive, async (req, res) => {
 /* ------------------------------------------------------------------ */
 /* Water                                                                 */
 /* ------------------------------------------------------------------ */
-router.post('/water', requireActive, async (req, res) => {
+router.post('/water', requireActive(), async (req, res) => {
   try {
     const { ml } = req.body;
     if (!ml || ml <= 0) return res.status(400).json({ error: 'ml must be a positive number' });
@@ -269,7 +306,7 @@ router.post('/water', requireActive, async (req, res) => {
   }
 });
 
-router.patch('/water/:entryId', requireActive, async (req, res) => {
+router.patch('/water/:entryId', requireActive(), async (req, res) => {
   try {
     const entry = await WaterEntry.findByPk(req.params.entryId, { include: [{ model: ChecklistLog }] });
     if (!entry || entry.ChecklistLog.userId !== req.user.id) return res.status(404).json({ error: 'Entry not found' });
@@ -285,7 +322,7 @@ router.patch('/water/:entryId', requireActive, async (req, res) => {
   }
 });
 
-router.delete('/water/:entryId', requireActive, async (req, res) => {
+router.delete('/water/:entryId', requireActive(), async (req, res) => {
   try {
     const entry = await WaterEntry.findByPk(req.params.entryId, { include: [{ model: ChecklistLog }] });
     if (!entry || entry.ChecklistLog.userId !== req.user.id) return res.status(404).json({ error: 'Entry not found' });
@@ -303,7 +340,7 @@ router.delete('/water/:entryId', requireActive, async (req, res) => {
 /* ------------------------------------------------------------------ */
 /* Fasting pause / resume                                               */
 /* ------------------------------------------------------------------ */
-router.post('/fasting/pause', requireActive, async (req, res) => {
+router.post('/fasting/pause', requireActive(), async (req, res) => {
   const user = req.user;
   user.pauseActive = true;
   user.pauseReason = req.body.reason || '';
@@ -315,7 +352,7 @@ router.post('/fasting/pause', requireActive, async (req, res) => {
   res.json({ fastingPause: { active: true, reason: user.pauseReason, pausedBy: 'client' }, day: user.currentChallengeDay() });
 });
 
-router.post('/fasting/resume', requireActive, async (req, res) => {
+router.post('/fasting/resume', requireActive(), async (req, res) => {
   const user = req.user;
   // A coach-initiated pause can only be lifted by the coach — otherwise a
   // client could simply undo a pause their coach set for a reason (e.g.
@@ -342,7 +379,7 @@ router.post('/fasting/resume', requireActive, async (req, res) => {
 /* ------------------------------------------------------------------ */
 /* Weight / BMI                                                         */
 /* ------------------------------------------------------------------ */
-router.post('/weight', requireActive, async (req, res) => {
+router.post('/weight', requireActive(), async (req, res) => {
   try {
     const { weightKg, note } = req.body;
     if (!weightKg) return res.status(400).json({ error: 'weightKg is required' });
@@ -353,7 +390,7 @@ router.post('/weight', requireActive, async (req, res) => {
   }
 });
 
-router.patch('/weight/:logId', requireActive, async (req, res) => {
+router.patch('/weight/:logId', requireActive(), async (req, res) => {
   try {
     const log = await WeightLog.findOne({ where: { id: req.params.logId, userId: req.user.id } });
     if (!log) return res.status(404).json({ error: 'Weight entry not found' });
@@ -366,7 +403,7 @@ router.patch('/weight/:logId', requireActive, async (req, res) => {
   }
 });
 
-router.delete('/weight/:logId', requireActive, async (req, res) => {
+router.delete('/weight/:logId', requireActive(), async (req, res) => {
   try {
     const log = await WeightLog.findOne({ where: { id: req.params.logId, userId: req.user.id } });
     if (!log) return res.status(404).json({ error: 'Weight entry not found' });
@@ -377,7 +414,7 @@ router.delete('/weight/:logId', requireActive, async (req, res) => {
   }
 });
 
-router.post('/profile', requireActive, async (req, res) => {
+router.post('/profile', requireActive(), async (req, res) => {
   try {
     const { heightCm, age, gender } = req.body;
     if (heightCm) req.user.heightCm = heightCm;
@@ -393,7 +430,7 @@ router.post('/profile', requireActive, async (req, res) => {
 // Medical & personal details — the client's own words on any conditions,
 // allergies or medications, so the coach can take them into account when
 // assigning meals. Free text, filled in and updated by the client only.
-router.get('/medical', requireActive, async (req, res) => {
+router.get('/medical', requireActive(), async (req, res) => {
   const u = req.user;
   res.json({
     medicalConditions: u.medicalConditions || '',
@@ -403,7 +440,7 @@ router.get('/medical', requireActive, async (req, res) => {
   });
 });
 
-router.post('/medical', requireActive, async (req, res) => {
+router.post('/medical', requireActive(), async (req, res) => {
   try {
     const { medicalConditions, allergies, medications, medicalNotes } = req.body;
     if (typeof medicalConditions === 'string') req.user.medicalConditions = medicalConditions;
@@ -417,7 +454,7 @@ router.post('/medical', requireActive, async (req, res) => {
   }
 });
 
-router.get('/history', requireActive, async (req, res) => {
+router.get('/history', requireActive(), async (req, res) => {
   const weightLogs = await WeightLog.findAll({ where: { userId: req.user.id }, order: [['date', 'ASC']] });
   const checklistLogs = await ChecklistLog.findAll({ where: { userId: req.user.id }, order: [['day', 'ASC']] });
   // BMI from the LATEST logged weight, not the one-time startWeightKg —
@@ -431,7 +468,7 @@ router.get('/history', requireActive, async (req, res) => {
 // shows: name, age, height, current weight, BMI, and where they are in
 // the programme. Kept separate from /history so the popup is a single
 // cheap call.
-router.get('/profile-summary', requireActive, async (req, res) => {
+router.get('/profile-summary', requireActive(), async (req, res) => {
   const user = req.user;
   const latest = await WeightLog.findOne({ where: { userId: user.id }, order: [['date', 'DESC']] });
   const currentWeightKg = latest ? latest.weightKg : null;
@@ -453,7 +490,7 @@ router.get('/profile-summary', requireActive, async (req, res) => {
 // GET /client/program-guide — the day-by-day "what's coming" text the
 // coach writes per day (Regimen.focus/phase). Read-only here; the coach
 // edits it from the roster's Program guide button.
-router.get('/program-guide', requireActive, async (req, res) => {
+router.get('/program-guide', requireActive(), async (req, res) => {
   const user = req.user;
   if (user.planMode !== 'protocol') return res.json({ days: [] });
   const regimens = await Regimen.findAll({
@@ -472,7 +509,7 @@ router.get('/program-guide', requireActive, async (req, res) => {
 /* ------------------------------------------------------------------ */
 /* Leaderboard                                                           */
 /* ------------------------------------------------------------------ */
-router.get('/leaderboard', requireActive, async (req, res) => {
+router.get('/leaderboard', requireActive(), async (req, res) => {
   const clients = await User.findAll({
     where: { role: 'client', planMode: 'protocol', status: { [Op.in]: ['active', 'paused'] } },
     order: [['points', 'DESC']],
@@ -484,7 +521,7 @@ router.get('/leaderboard', requireActive, async (req, res) => {
 /* ------------------------------------------------------------------ */
 /* Referral                                                              */
 /* ------------------------------------------------------------------ */
-router.get('/referral', requireActive, async (req, res) => {
+router.get('/referral', requireActive(), async (req, res) => {
   const referredCount = await User.count({ where: { referredBy: req.user.id } });
   res.json({
     referralCode: req.user.referralCode,
@@ -493,7 +530,7 @@ router.get('/referral', requireActive, async (req, res) => {
   });
 });
 
-router.post('/payout-request', requireActive, async (req, res) => {
+router.post('/payout-request', requireActive(), async (req, res) => {
   try {
     const { amountInr, upiId } = req.body;
     if (!amountInr || !upiId) return res.status(400).json({ error: 'amountInr and upiId are required' });
@@ -532,25 +569,34 @@ router.get('/payment-status', async (req, res) => {
 
 router.get('/plans', async (req, res) => {
   let plans = await Plan.findAll({ where: { active: true }, order: [['order', 'ASC'], ['priceInr', 'ASC']] });
-  // A client who has already paid for a non-trial plan never sees trial/
-  // intro plans in their own picker — otherwise a paying client looking
-  // to add or renew a plan is shown what reads as a downgrade option.
-  if (req.user.hadPaidPlan) plans = plans.filter(p => !p.isTrial);
+  // Free/trial plans are only for brand-new signups. Once a client has
+  // ever had an approved payment (hadPaidPlan), both trial-flagged plans
+  // and ₹0 plans drop out of their own picker — otherwise an already-
+  // enrolled client renewing or upgrading is shown what reads as a free
+  // downgrade option.
+  if (req.user.hadPaidPlan) plans = plans.filter(p => !p.isTrial && p.priceInr > 0);
   res.json({ plans });
 });
 
 // GET /client/journal — "SVR Journal / Personal Notes": coach-written
 // topics shown on the Program Guide page. Same list for every active
 // client (protocol or tracker) — read-only here.
-router.get('/journal', requireActive, async (req, res) => {
+router.get('/journal', requireActive(), async (req, res) => {
   const topics = await JournalTopic.findAll({ where: { active: true }, order: [['order', 'ASC'], ['id', 'ASC']] });
   res.json({ topics });
+});
+
+// GET /client/achievements — badges earned from completed 24h+ fasts
+// (awarded automatically — see /checklist and /tracker/stop above).
+router.get('/achievements', requireActive(), async (req, res) => {
+  const achievements = await Achievement.findAll({ where: { userId: req.user.id }, order: [['earnedAt', 'DESC']] });
+  res.json({ achievements });
 });
 
 /* ------------------------------------------------------------------ */
 /* Fasting Tracker plan — fully self-guided, no coach involvement       */
 /* ------------------------------------------------------------------ */
-router.post('/tracker/start', requireActive, async (req, res) => {
+router.post('/tracker/start', requireActive(), async (req, res) => {
   try {
     if (req.user.planMode !== 'tracker') return res.status(403).json({ error: 'Not on the Fasting Tracker plan' });
     const existing = await TrackerSession.findOne({ where: { userId: req.user.id, status: 'running' } });
@@ -565,7 +611,7 @@ router.post('/tracker/start', requireActive, async (req, res) => {
   }
 });
 
-router.post('/tracker/stop', requireActive, async (req, res) => {
+router.post('/tracker/stop', requireActive(), async (req, res) => {
   try {
     const session = await TrackerSession.findOne({ where: { userId: req.user.id, status: 'running' } });
     if (!session) return res.status(404).json({ error: 'No fast is running' });
@@ -574,20 +620,29 @@ router.post('/tracker/stop', requireActive, async (req, res) => {
     session.status = actualHours >= session.targetHours ? 'completed' : 'broken';
     if (typeof req.body.note === 'string') session.note = req.body.note;
     await session.save();
+
+    if (session.status === 'completed' && actualHours >= 24) {
+      await awardAchievement(
+        req.user.id, 'fast_24h', '24-Hour Fast Completed',
+        `A self-guided fast of ${Math.round(actualHours * 10) / 10} hours.`,
+        Math.round(actualHours * 10) / 10, `tracker-session-${session.id}`
+      );
+    }
+
     res.json({ session });
   } catch (err) {
     res.status(500).json({ error: 'Could not stop fast', detail: err.message });
   }
 });
 
-router.get('/tracker/history', requireActive, async (req, res) => {
+router.get('/tracker/history', requireActive(), async (req, res) => {
   const sessions = await TrackerSession.findAll({ where: { userId: req.user.id }, order: [['startAt', 'DESC']], limit: 60 });
   res.json({ sessions });
 });
 
 // PATCH /client/tracker/session/:id  { startAt, targetHours }  — edit a running
 // fast (the "pencil" edit on the timer, e.g. "actually started earlier").
-router.patch('/tracker/session/:id', requireActive, async (req, res) => {
+router.patch('/tracker/session/:id', requireActive(), async (req, res) => {
   try {
     const session = await TrackerSession.findOne({ where: { id: req.params.id, userId: req.user.id } });
     if (!session) return res.status(404).json({ error: 'Fast not found' });
@@ -604,7 +659,7 @@ router.patch('/tracker/session/:id', requireActive, async (req, res) => {
 // GET /client/tracker/stats — the motivational numbers behind the
 // "Visualize your experience" style card: total fasts, longest fast,
 // rolling average, current/longest streak of days with a completed fast.
-router.get('/tracker/stats', requireActive, async (req, res) => {
+router.get('/tracker/stats', requireActive(), async (req, res) => {
   const sessions = await TrackerSession.findAll({ where: { userId: req.user.id, status: { [Op.in]: ['completed', 'broken'] } }, order: [['startAt', 'DESC']] });
   const completed = sessions.filter(s => s.status === 'completed');
   const hoursOf = (s) => (new Date(s.endAt) - new Date(s.startAt)) / 3600000;
@@ -643,7 +698,7 @@ router.get('/tracker/stats', requireActive, async (req, res) => {
 
 // Water logging for tracker clients — keyed by calendar date, since they
 // have no protocol "day" counter at all.
-router.post('/tracker/water', requireActive, async (req, res) => {
+router.post('/tracker/water', requireActive(), async (req, res) => {
   try {
     const { ml } = req.body;
     if (!ml || ml <= 0) return res.status(400).json({ error: 'ml must be a positive number' });
@@ -654,7 +709,7 @@ router.post('/tracker/water', requireActive, async (req, res) => {
   }
 });
 
-router.get('/tracker/water', requireActive, async (req, res) => {
+router.get('/tracker/water', requireActive(), async (req, res) => {
   const since = new Date(); since.setDate(since.getDate() - 9); since.setHours(0, 0, 0, 0);
   const entries = await TrackerWaterEntry.findAll({ where: { userId: req.user.id, at: { [Op.gte]: since } }, order: [['at', 'ASC']] });
 
@@ -673,14 +728,14 @@ router.get('/tracker/water', requireActive, async (req, res) => {
   res.json({ goalMl: req.user.waterGoalMl, todayMl, last7 });
 });
 
-router.delete('/tracker/water/:id', requireActive, async (req, res) => {
+router.delete('/tracker/water/:id', requireActive(), async (req, res) => {
   const entry = await TrackerWaterEntry.findOne({ where: { id: req.params.id, userId: req.user.id } });
   if (!entry) return res.status(404).json({ error: 'Entry not found' });
   await entry.destroy();
   res.json({ ok: true });
 });
 
-router.post('/tracker/water-goal', requireActive, async (req, res) => {
+router.post('/tracker/water-goal', requireActive(), async (req, res) => {
   const { goalMl } = req.body;
   if (!goalMl || goalMl <= 0) return res.status(400).json({ error: 'goalMl is required' });
   req.user.waterGoalMl = goalMl;
@@ -693,7 +748,7 @@ router.post('/tracker/water-goal', requireActive, async (req, res) => {
 /* whether the client is coached (streak/points) or on the tracker      */
 /* (fasts/streak). Kept separate from /dashboard so it's cheap to poll. */
 /* ------------------------------------------------------------------ */
-router.get('/progress', requireActive, async (req, res) => {
+router.get('/progress', requireActive(), async (req, res) => {
   const user = req.user;
   if (user.planMode === 'tracker') {
     const sessions = await TrackerSession.findAll({ where: { userId: user.id, status: { [Op.in]: ['completed', 'broken'] } } });
@@ -729,7 +784,7 @@ router.get('/progress', requireActive, async (req, res) => {
 /* ------------------------------------------------------------------ */
 /* Alerts                                                                */
 /* ------------------------------------------------------------------ */
-router.get('/alerts', requireActive, async (req, res) => {
+router.get('/alerts', requireActive({ allowExpired: true }), async (req, res) => {
   const alerts = await Alert.findAll({
     where: { [Op.or]: [{ userId: null }, { userId: req.user.id }] },
     include: [{ model: AlertRead, where: { userId: req.user.id }, required: false }],
@@ -739,7 +794,7 @@ router.get('/alerts', requireActive, async (req, res) => {
   res.json({ alerts, unread });
 });
 
-router.post('/alerts/:id/read', requireActive, async (req, res) => {
+router.post('/alerts/:id/read', requireActive({ allowExpired: true }), async (req, res) => {
   const existing = await AlertRead.findOne({ where: { alertId: req.params.id, userId: req.user.id } });
   if (!existing) await AlertRead.create({ alertId: req.params.id, userId: req.user.id });
   res.json({ ok: true });
