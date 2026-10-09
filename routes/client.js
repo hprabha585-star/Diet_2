@@ -29,7 +29,7 @@ function requireActive(opts = {}) {
     if (req.user.status !== 'active' && req.user.status !== 'paused') {
       return res.status(403).json({ error: 'Your account is not active yet. Please complete payment and wait for coach approval.' });
     }
-    if (!opts.allowExpired && req.user.planMode === 'protocol' && req.user.isExpired()) {
+    if (!opts.allowExpired && req.user.hasProtocolMode() && req.user.isExpired()) {
       return res.status(403).json({ error: 'Your plan has expired. Renew from the Payment page to continue.', expired: true });
     }
     next();
@@ -41,7 +41,7 @@ function requireActive(opts = {}) {
 // title, so a client who renews and later expires again on a NEW due
 // date gets a fresh alert instead of being silently skipped forever.
 async function maybeRaiseExpiryAlert(user) {
-  if (user.planMode !== 'protocol' || user.status !== 'active' || !user.isExpired()) return;
+  if (!user.hasProtocolMode() || user.status !== 'active' || !user.isExpired()) return;
   const dueDate = user.dueDate();
   const title = `Plan expired — ${dueDate}`;
   const existing = await Alert.findOne({ where: { userId: user.id, title } });
@@ -110,15 +110,30 @@ async function syncChecklistWithRegimen(user, day) {
 /* ------------------------------------------------------------------ */
 router.get('/dashboard', requireActive({ allowExpired: true }), async (req, res) => {
   const user = req.user;
+  const hasProtocol = user.hasProtocolMode();
+  const hasTracker = user.hasTrackerMode();
+  const dualAccess = hasProtocol && hasTracker;
 
-  if (user.planMode === 'tracker') {
+  // Tracker summary, built whenever the client has tracker access at all —
+  // reused as-is for a tracker-only client, and tacked onto the protocol
+  // response below for a dual-access client so BOTH are available instead
+  // of only whichever plan happens to be "current".
+  let trackerSummary = null;
+  if (hasTracker) {
     const running = await TrackerSession.findOne({ where: { userId: user.id, status: 'running' } });
     const recent = await TrackerSession.findAll({ where: { userId: user.id }, order: [['startAt', 'DESC']], limit: 10 });
+    trackerSummary = { running, recentSessions: recent };
+  }
+
+  if (hasTracker && !hasProtocol) {
     return res.json({
       planMode: 'tracker',
+      dualAccess: false,
+      hasProtocolAccess: false,
+      hasTrackerAccess: true,
       user: user.toSafeJSON(),
-      running,
-      recentSessions: recent
+      running: trackerSummary.running,
+      recentSessions: trackerSummary.recentSessions
     });
   }
 
@@ -131,6 +146,7 @@ router.get('/dashboard', requireActive({ allowExpired: true }), async (req, res)
   if (user.isExpired()) {
     return res.json({
       planMode: 'protocol',
+      dualAccess, hasProtocolAccess: hasProtocol, hasTrackerAccess: hasTracker,
       expired: true,
       user: user.toSafeJSON(),
       challengeLengthDays: user.challengeLengthDays,
@@ -148,6 +164,11 @@ router.get('/dashboard', requireActive({ allowExpired: true }), async (req, res)
 
   res.json({
     planMode: 'protocol',
+    dualAccess, hasProtocolAccess: hasProtocol, hasTrackerAccess: hasTracker,
+    // Present only for a dual-access client — lets the Today page unlock
+    // the Fasting Tracker nav item and show its running/recent sessions
+    // without the client having to give up the coached protocol view.
+    trackerSummary: dualAccess ? trackerSummary : null,
     expired: false,
     user: user.toSafeJSON(),
     day,
@@ -480,7 +501,7 @@ router.get('/profile-summary', requireActive(), async (req, res) => {
     currentWeightKg,
     bmi: user.bmi(currentWeightKg),
     healthyWeightRange: user.healthyWeightRange(),
-    day: user.planMode === 'protocol' ? user.currentChallengeDay() : null,
+    day: user.hasProtocolMode() ? user.currentChallengeDay() : null,
     challengeLengthDays: user.challengeLengthDays,
     points: user.points,
     streakCurrent: user.streakCurrent
@@ -492,7 +513,7 @@ router.get('/profile-summary', requireActive(), async (req, res) => {
 // edits it from the roster's Program guide button.
 router.get('/program-guide', requireActive(), async (req, res) => {
   const user = req.user;
-  if (user.planMode !== 'protocol') return res.json({ days: [] });
+  if (!user.hasProtocolMode()) return res.json({ days: [] });
   const regimens = await Regimen.findAll({
     where: { userId: user.id }, order: [['day', 'ASC']],
     attributes: ['day', 'phase', 'focus', 'protocolType']
@@ -598,7 +619,7 @@ router.get('/achievements', requireActive(), async (req, res) => {
 /* ------------------------------------------------------------------ */
 router.post('/tracker/start', requireActive(), async (req, res) => {
   try {
-    if (req.user.planMode !== 'tracker') return res.status(403).json({ error: 'Not on the Fasting Tracker plan' });
+    if (!req.user.hasTrackerMode()) return res.status(403).json({ error: 'Not on the Fasting Tracker plan' });
     const existing = await TrackerSession.findOne({ where: { userId: req.user.id, status: 'running' } });
     if (existing) return res.status(409).json({ error: 'A fast is already running' });
 
@@ -750,7 +771,10 @@ router.post('/tracker/water-goal', requireActive(), async (req, res) => {
 /* ------------------------------------------------------------------ */
 router.get('/progress', requireActive(), async (req, res) => {
   const user = req.user;
-  if (user.planMode === 'tracker') {
+  // A dual-access client sees the coached/protocol strip here (it's the
+  // "Today" page's main program) — their Fasting Tracker stats live on
+  // the tracker page itself, which calls /tracker/stats directly.
+  if (user.hasTrackerMode() && !user.hasProtocolMode()) {
     const sessions = await TrackerSession.findAll({ where: { userId: user.id, status: { [Op.in]: ['completed', 'broken'] } } });
     const completed = sessions.filter(s => s.status === 'completed');
     const daysWithCompleted = new Set(completed.map(s => new Date(s.startAt).toDateString()));

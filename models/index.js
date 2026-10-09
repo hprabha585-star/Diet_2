@@ -14,7 +14,18 @@ const User = sequelize.define('User', {
 
   // Cohort / subscription
   tier: { type: DataTypes.STRING, defaultValue: 'none' },       // Plan key
+  // planMode is the PRIMARY/default view (which "Today" screen shows, and
+  // which plan a brand-new day-count/challenge belongs to). A client can
+  // additionally hold BOTH kinds of access at once — e.g. a 55-day
+  // protocol plan AND the Fasting Tracker — in which case the two
+  // hasXAccess flags below are both true and the client gets both the
+  // coached Today view AND the Fasting Tracker nav item unlocked, instead
+  // of only whichever plan happens to be "current". These flags are only
+  // ever set true (never cleared) by an approved payment — see
+  // POST /admin/payments/:id/approve.
   planMode: { type: DataTypes.ENUM('protocol', 'tracker'), defaultValue: 'protocol' },
+  hasProtocolAccess: { type: DataTypes.BOOLEAN, defaultValue: false },
+  hasTrackerAccess: { type: DataTypes.BOOLEAN, defaultValue: false },
   status: { type: DataTypes.ENUM('pending_payment', 'pending_approval', 'active', 'paused', 'completed', 'rejected'), defaultValue: 'pending_payment' },
   challengeStartDate: { type: DataTypes.DATEONLY },              // local calendar date, not a timestamp
   challengeLengthDays: { type: DataTypes.INTEGER, defaultValue: 55 },
@@ -65,6 +76,21 @@ const User = sequelize.define('User', {
   // ever sees the free/trial options (see GET /client/plans).
   hadPaidPlan: { type: DataTypes.BOOLEAN, defaultValue: false }
 });
+
+// Effective access, with a fallback for clients created before the dual-
+// access flags existed: an old row has both flags false, so it falls back
+// to "whichever mode planMode currently says" — exactly today's single-
+// plan behaviour. A client approved for BOTH plans (old or new) has the
+// matching flag(s) explicitly set true by the payment-approval route.
+User.prototype.hasProtocolMode = function () {
+  return this.hasProtocolAccess || this.planMode === 'protocol';
+};
+User.prototype.hasTrackerMode = function () {
+  return this.hasTrackerAccess || this.planMode === 'tracker';
+};
+User.prototype.isDualAccess = function () {
+  return this.hasProtocolMode() && this.hasTrackerMode();
+};
 
 User.prototype.currentChallengeDay = function () {
   if (!this.challengeStartDate) return 0;

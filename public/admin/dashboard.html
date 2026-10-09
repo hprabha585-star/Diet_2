@@ -46,8 +46,14 @@
 
       <!-- ROSTER -->
       <div class="view active" id="view-roster">
-        <div class="row-between" style="margin-bottom:14px;">
-          <input type="text" class="roster-search" id="roster-search" placeholder="Search clients…" oninput="renderRoster()" style="max-width:280px;padding:10px 13px;border:1px solid var(--line);border-radius:var(--radius-sm);">
+        <div class="row-between" style="margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <input type="text" class="roster-search" id="roster-search" placeholder="Search clients…" oninput="renderRoster()" style="max-width:280px;padding:10px 13px;border:1px solid var(--line);border-radius:var(--radius-sm);">
+            <select id="roster-plan-filter" onchange="renderRoster()" style="padding:10px 13px;border:1px solid var(--line);border-radius:var(--radius-sm);">
+              <option value="">All plans</option>
+              <option value="__dual">Both (Protocol + Tracker)</option>
+            </select>
+          </div>
           <button class="btn btn-dark btn-sm" onclick="openAddClientModal()">+ Add client</button>
         </div>
         <div class="roster-list" id="roster-list"><p class="hint">Loading…</p></div>

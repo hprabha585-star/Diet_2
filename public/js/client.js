@@ -201,10 +201,66 @@ async function loadAchievements() {
         <div style="font-weight:600;margin-top:6px;">${esc(a.title)}</div>
         ${a.description ? `<p class="hint" style="margin-top:4px;">${esc(a.description)}</p>` : ''}
         <div class="hint" style="margin-top:6px;">${new Date(a.earnedAt).toLocaleDateString()}</div>
+        <button class="btn-ghost btn-sm" style="margin-top:6px;" onclick='shareAchievement(${JSON.stringify(a.title).replace(/'/g, "&#39;")}, ${JSON.stringify(a.description || '').replace(/'/g, "&#39;")})'>Share this</button>
       </div>`).join('')}</div>`
       : '<p class="hint">No achievements yet — complete a 24-hour+ fast to earn your first badge.</p>';
   } catch (err) {
     el.innerHTML = `<p class="hint">${esc(err.message)}</p>`;
+  }
+}
+
+// Shares one badge as a short text snippet (Web Share API where available,
+// otherwise copied to the clipboard so the client can paste it anywhere).
+async function shareAchievement(title, description) {
+  const text = `🏆 ${title}${description ? ` — ${description}` : ''} #FastCoach`;
+  await shareTextOrCopy(text, title);
+}
+
+// "Share everything" — bundles BMI, current weight, and the client's
+// fasting-day streak/completion into one shareable update, pulling the
+// numbers from the same endpoints the Today page and History page already
+// use (profile-summary + progress) so it's always the live figures.
+async function shareProgress() {
+  const statusEl = document.getElementById('share-progress-status');
+  statusEl.textContent = 'Preparing…';
+  try {
+    const [summary, progress] = await Promise.all([
+      apiRequest('/client/profile-summary'),
+      apiRequest('/client/progress')
+    ]);
+    const lines = [`My FastCoach progress:`];
+    if (summary.bmi) lines.push(`⚖️ BMI: ${summary.bmi}`);
+    if (summary.currentWeightKg) lines.push(`🧍 Weight: ${summary.currentWeightKg} kg`);
+    if (progress.planMode === 'protocol') {
+      lines.push(`🔥 Day ${progress.day}/${progress.challengeLengthDays} · ${progress.streakCurrent}-day streak · ${progress.points} points`);
+    } else if (progress.planMode === 'tracker') {
+      lines.push(`⏱️ ${progress.totalFasts} fasts logged · ${progress.currentStreak}-day streak · longest ${progress.longestFastHours}h`);
+    }
+    lines.push('#FastCoach');
+    statusEl.textContent = '';
+    await shareTextOrCopy(lines.join('\n'), 'My FastCoach progress');
+  } catch (err) {
+    statusEl.textContent = err.message;
+  }
+}
+
+// Shared helper: tries the native share sheet first (works well on the
+// Android APK's WebView too), falls back to the clipboard, and finally to
+// a plain alert so there's always SOME way to get the text out.
+async function shareTextOrCopy(text, title) {
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: title || 'FastCoach', text });
+      return;
+    }
+  } catch (err) {
+    if (err && err.name === 'AbortError') return; // user cancelled the share sheet
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    alert('Copied to clipboard — paste it anywhere to share.');
+  } catch (err) {
+    alert(text);
   }
 }
 
@@ -252,7 +308,10 @@ async function loadDashboard() {
     throw err;
   }
 
-  document.getElementById('plan-mode-tag').textContent = dashboardData.planMode === 'tracker' ? 'Fasting Tracker' : 'Coached client';
+  const dualAccess = !!dashboardData.dualAccess;
+  document.getElementById('plan-mode-tag').textContent = dualAccess
+    ? 'Coached client + Tracker'
+    : (dashboardData.planMode === 'tracker' ? 'Fasting Tracker' : 'Coached client');
 
   // Validity ran out — show the renew prompt and hide everything else
   // instead of letting today's checklist/window keep showing on repeat.
@@ -263,21 +322,26 @@ async function loadDashboard() {
     document.getElementById('today-tracker-redirect').style.display = 'none';
     document.getElementById('progress-bars').style.display = 'none';
     document.getElementById('validity-banner').style.display = 'none';
+    document.getElementById('dual-tracker-card').style.display = 'none';
     if (timerInterval) clearInterval(timerInterval);
     return;
   }
   document.getElementById('expired-notice').style.display = 'none';
 
-  // Fasting Tracker nav item: unlocked only when this IS the client's plan.
+  // Fasting Tracker nav item: unlocked whenever this client holds tracker
+  // access at all — whether that's their only plan, or one of two plans
+  // held at once (dual access).
   const navTracker = document.getElementById('nav-tracker');
-  const isTrackerPlan = dashboardData.planMode === 'tracker';
-  navTracker.classList.toggle('unlocked', isTrackerPlan);
+  const hasTrackerAccess = !!dashboardData.hasTrackerAccess;
+  const isTrackerOnly = dashboardData.planMode === 'tracker' && !dualAccess;
+  navTracker.classList.toggle('unlocked', hasTrackerAccess);
 
-  if (isTrackerPlan) {
+  if (isTrackerOnly) {
     document.getElementById('today-protocol').style.display = 'none';
     document.getElementById('today-tracker-redirect').style.display = 'block';
     document.getElementById('progress-bars').style.display = 'none';
     document.getElementById('validity-banner').style.display = 'none';
+    document.getElementById('dual-tracker-card').style.display = 'none';
   } else {
     document.getElementById('today-tracker-redirect').style.display = 'none';
     document.getElementById('today-protocol').style.display = 'block';
@@ -288,6 +352,17 @@ async function loadDashboard() {
       banner.style.display = 'block';
     } else {
       banner.style.display = 'none';
+    }
+
+    const dualCard = document.getElementById('dual-tracker-card');
+    if (dualAccess) {
+      const running = dashboardData.trackerSummary && dashboardData.trackerSummary.running;
+      document.getElementById('dual-tracker-text').textContent = running
+        ? 'A fast is currently running on your Fasting Tracker.'
+        : 'You also have Fasting Tracker access.';
+      dualCard.style.display = 'block';
+    } else {
+      dualCard.style.display = 'none';
     }
   }
 
@@ -608,6 +683,49 @@ function tick() {
 /* ------------------------------------------------------------------ */
 /* History & weight                                                      */
 /* ------------------------------------------------------------------ */
+let weightLogsWithDelta = []; // cached, newest-first, so the range toggle re-renders without refetching
+let weightListShowAll = false;
+
+function renderWeightList() {
+  const listEl = document.getElementById('weight-list');
+  if (!listEl) return;
+  const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const visible = weightListShowAll
+    ? weightLogsWithDelta
+    : weightLogsWithDelta.filter(w => new Date(w.date) >= sevenDaysAgo);
+
+  const titleEl = document.getElementById('weight-list-title');
+  const toggleEl = document.getElementById('weight-list-toggle');
+  if (titleEl) titleEl.textContent = weightListShowAll ? 'All entries' : 'Last 7 days';
+  if (toggleEl) {
+    const hiddenCount = weightLogsWithDelta.length - weightLogsWithDelta.filter(w => new Date(w.date) >= sevenDaysAgo).length;
+    toggleEl.textContent = weightListShowAll ? 'Show last 7 days' : `See all entries${hiddenCount ? ` (${hiddenCount} earlier)` : ''}`;
+    toggleEl.style.display = weightLogsWithDelta.length === 0 || (!weightListShowAll && hiddenCount === 0) ? 'none' : 'inline-block';
+  }
+
+  listEl.innerHTML = visible.map(w => {
+    const deltaHtml = w.delta === null ? ''
+      : w.delta === 0 ? '<span class="delta flat">no change</span>'
+      : w.delta > 0 ? `<span class="delta up">▲ ${w.delta} kg</span>`
+      : `<span class="delta down">▼ ${Math.abs(w.delta)} kg</span>`;
+    // The timestamp was already recorded at check-in time — this was
+    // only ever dropping it at display time by formatting the date
+    // alone, so the time of day the client actually weighed in never
+    // showed anywhere.
+    const when = new Date(w.date);
+    const whenStr = `${when.toLocaleDateString()} ${when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    return `<div class="row-between weight-row" style="padding:10px 0;border-top:1px solid var(--line);">
+      <span>${w.weightKg} kg — ${whenStr} ${deltaHtml}</span>
+      <button class="btn-ghost btn-sm" onclick="deleteWeight(${w.id})">Delete</button>
+    </div>`;
+  }).join('') || `<p class="hint">${weightListShowAll ? 'No entries yet.' : 'No entries in the last 7 days.'}</p>`;
+}
+
+function toggleWeightListRange() {
+  weightListShowAll = !weightListShowAll;
+  renderWeightList();
+}
+
 async function loadHistoryPage(opts = {}) {
   try {
     const data = await apiRequest('/client/history');
@@ -620,22 +738,8 @@ async function loadHistoryPage(opts = {}) {
       ...w,
       delta: i > 0 ? Math.round((w.weightKg - chrono[i - 1].weightKg) * 10) / 10 : null
     }));
-    document.getElementById('weight-list').innerHTML = withDelta.slice().reverse().map(w => {
-      const deltaHtml = w.delta === null ? ''
-        : w.delta === 0 ? '<span class="delta flat">no change</span>'
-        : w.delta > 0 ? `<span class="delta up">▲ ${w.delta} kg</span>`
-        : `<span class="delta down">▼ ${Math.abs(w.delta)} kg</span>`;
-      // The timestamp was already recorded at check-in time — this was
-      // only ever dropping it at display time by formatting the date
-      // alone, so the time of day the client actually weighed in never
-      // showed anywhere.
-      const when = new Date(w.date);
-      const whenStr = `${when.toLocaleDateString()} ${when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-      return `<div class="row-between weight-row" style="padding:10px 0;border-top:1px solid var(--line);">
-        <span>${w.weightKg} kg — ${whenStr} ${deltaHtml}</span>
-        <button class="btn-ghost btn-sm" onclick="deleteWeight(${w.id})">Delete</button>
-      </div>`;
-    }).join('') || '<p class="hint">No entries yet.</p>';
+    weightLogsWithDelta = withDelta.slice().reverse(); // newest first
+    renderWeightList();
 
     // Pre-fill the calculator with whatever we already know, so returning
     // to this page doesn't make the person retype everything.

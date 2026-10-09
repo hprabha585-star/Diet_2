@@ -69,6 +69,14 @@
       <!-- TODAY -->
       <div class="view active" id="view-today">
         <div class="card progress-strip" id="progress-strip" style="display:none;"></div>
+        <!-- Shown only for a client who holds BOTH a coached protocol plan
+             AND the Fasting Tracker, so the tracker stays easy to reach
+             from the main Today page instead of being hidden once the
+             protocol view takes over the screen. -->
+        <div class="card hint" id="dual-tracker-card" style="display:none;margin-bottom:12px;">
+          <span id="dual-tracker-text">You also have Fasting Tracker access.</span>
+          <a class="btn btn-outline btn-sm" style="margin-left:10px;" href="/client/tracker.html">Open Fasting Tracker</a>
+        </div>
         <div class="card hint" id="validity-banner" style="display:none;margin-bottom:12px;"></div>
         <div class="progress-bars" id="progress-bars" style="display:none;"></div>
 
@@ -143,7 +151,11 @@
           <h3>Log today's weight</h3>
           <div class="field" style="margin-top:14px;max-width:220px;"><label>Weight (kg)</label><input type="number" id="weight-input" step="0.1"></div>
           <button class="btn btn-primary btn-sm" onclick="logWeight()">Save</button>
-          <div id="weight-list" style="margin-top:16px;"></div>
+          <div class="row-between" style="margin-top:16px;align-items:baseline;">
+            <h4 id="weight-list-title" style="margin:0;font-size:13px;color:var(--muted);font-weight:600;">Last 7 days</h4>
+            <button class="btn-ghost btn-sm" id="weight-list-toggle" onclick="toggleWeightListRange()">See all entries</button>
+          </div>
+          <div id="weight-list" style="margin-top:8px;"></div>
         </div>
         <div class="card bmi-card" style="margin-top:16px;">
           <h3>BMI calculator</h3>
@@ -183,6 +195,12 @@
       <!-- YOUR ACHIEVEMENTS — badges earned from completed fasts -->
       <div class="view" id="view-achievements">
         <div class="page-intro"><h2>Your Achievements</h2><p class="hint">Badges earned from completed fasts — including any 24-hour+ fast, coach-assigned or self-guided.</p></div>
+        <div class="card" id="share-progress-card" style="margin-bottom:16px;">
+          <div style="font-weight:600;margin-bottom:4px;">Share your progress</div>
+          <p class="hint" style="margin-bottom:10px;">Your BMI, current weight, and fasting-day streak, bundled into one shareable update.</p>
+          <button class="btn btn-primary btn-sm" onclick="shareProgress()">Share everything</button>
+          <span id="share-progress-status" class="hint" style="margin-left:10px;"></span>
+        </div>
         <div id="achievements-list"><p class="hint">Loading…</p></div>
       </div>
 

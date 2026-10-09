@@ -49,7 +49,9 @@ router.post('/clients', async (req, res) => {
 
     const user = await User.create({
       name, email: email.toLowerCase(), phone, passwordHash, role: 'client',
-      tier: tier || 'none', planMode, status, challengeStartDate, referralCode: code
+      tier: tier || 'none', planMode, status, challengeStartDate, referralCode: code,
+      hasProtocolAccess: activateNow && planMode === 'protocol',
+      hasTrackerAccess: activateNow && planMode === 'tracker'
     });
     res.status(201).json({ user: user.toSafeJSON() });
   } catch (err) {
@@ -64,8 +66,10 @@ router.get('/clients', async (req, res) => {
   const clients = await User.findAll({ where: { role: 'client' }, order: [['createdAt', 'DESC']] });
   const results = await Promise.all(clients.map(async (c) => {
     const day = c.currentChallengeDay();
+    const hasProtocolAccess = c.hasProtocolMode();
+    const hasTrackerAccess = c.hasTrackerMode();
     let regimen = null, completionPercent = null;
-    if (c.planMode === 'protocol' && day > 0) {
+    if (hasProtocolAccess && day > 0) {
       regimen = await Regimen.findOne({ where: { userId: c.id, day } });
       const log = await ChecklistLog.findOne({ where: { userId: c.id, day } });
       completionPercent = log ? log.completionPercent : 0;
@@ -73,6 +77,7 @@ router.get('/clients', async (req, res) => {
     return {
       id: c.id, name: c.name, email: c.email, phone: c.phone,
       status: c.status, planMode: c.planMode, tier: c.tier,
+      hasProtocolAccess, hasTrackerAccess, isDualAccess: hasProtocolAccess && hasTrackerAccess,
       timezone: c.timezone, day, challengeLengthDays: c.challengeLengthDays,
       // Plan duration/validity, so the coach can see at a glance how long
       // this client's plan runs and how much of it is left, without
@@ -606,11 +611,21 @@ router.post('/payments/:id/approve', async (req, res) => {
     payment.reviewedAt = new Date();
     await payment.save();
 
+    const approvedMode = plan ? plan.mode : 'protocol';
     client.status = 'active';
     client.tier = payment.tier;
-    client.planMode = plan ? plan.mode : 'protocol';
-    client.challengeStartDate = new Date().toISOString().slice(0, 10);
-    client.challengeLengthDays = plan ? plan.durationDays : 55;
+    client.planMode = approvedMode; // newest approval becomes the primary/default view
+    // Only touch the protocol day-counter fields when THIS approval is a
+    // protocol plan — a client who already has an active 55-day plan and
+    // now also buys the Fasting Tracker should keep their existing day
+    // count, not have it reset by the tracker purchase.
+    if (approvedMode === 'tracker') {
+      client.hasTrackerAccess = true;
+    } else {
+      client.hasProtocolAccess = true;
+      client.challengeStartDate = new Date().toISOString().slice(0, 10);
+      client.challengeLengthDays = plan ? plan.durationDays : 55;
+    }
     // Once a client has ANY approved payment — trial or paid — free/trial
     // plans stay hidden from them from now on (see GET /client/plans):
     // only a brand-new signup who has never enrolled in anything sees

@@ -777,6 +777,11 @@
   width: 100%; min-height: 44px; padding: 9px 11px; border: 1px solid var(--line);
   border-radius: var(--radius-sm); font-size: 13.5px; font-family: inherit; resize: vertical;
 }
+.guide-editor-content { min-width: 0; }
+.guide-window-row { flex-wrap: wrap; }
+.guide-window-row .field { min-width: 110px; }
+.guide-window-row .field label { font-size: 12px; display: block; margin-bottom: 4px; }
+.guide-window-row .field input { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: var(--radius-sm); font-size: 13.5px; }
 
 /* Days-to-allocate live preview — impossible to miss when it's not 1 */
 .range-warning { color: #8F5720; font-weight: 600; }

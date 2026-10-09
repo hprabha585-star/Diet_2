@@ -74,6 +74,7 @@ async function loadRoster() {
   try {
     const data = await apiRequest('/admin/clients');
     roster = data.clients;
+    populateRosterPlanFilter();
     renderRoster();
     renderProgramGuidePicker();
     populateChatClientPicker();
@@ -83,21 +84,41 @@ async function loadRoster() {
   }
 }
 
+// Plan-filter dropdown options come from the actual plans the coach has
+// created (plansCache, loaded separately) plus the two access-combo
+// options baked into the HTML — so the list always matches real plan
+// names/tiers instead of a hardcoded guess.
+function populateRosterPlanFilter() {
+  const sel = document.getElementById('roster-plan-filter');
+  if (!sel) return;
+  const current = sel.value;
+  const staticOptions = ['', '__dual'];
+  const planOptions = plansCache.map(p => `<option value="${esc(p.key)}">${esc(p.name)}</option>`).join('');
+  sel.innerHTML = `
+    <option value="">All plans</option>
+    <option value="__dual">Both (Protocol + Tracker)</option>
+    ${planOptions}`;
+  if ([...sel.options].some(o => o.value === current)) sel.value = current;
+}
+
 function renderRoster() {
   const q = (document.getElementById('roster-search').value || '').toLowerCase();
-  const list = roster.filter(c => !q || c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q));
+  const planFilter = document.getElementById('roster-plan-filter') ? document.getElementById('roster-plan-filter').value : '';
+  let list = roster.filter(c => !q || c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q));
+  if (planFilter === '__dual') list = list.filter(c => c.isDualAccess);
+  else if (planFilter) list = list.filter(c => c.tier === planFilter);
   document.getElementById('roster-list').innerHTML = list.length ? list.map(c => `
     <div class="roster-card">
       <div class="roster-main">
         <div class="roster-avatar">${esc(c.name.slice(0, 1).toUpperCase())}</div>
         <div style="min-width:0;">
-          <div class="roster-name">${esc(c.name)} ${c.planMode === 'tracker' ? '<span class="badge badge-active" style="margin-left:6px;">Tracker</span>' : ''}</div>
+          <div class="roster-name">${esc(c.name)} ${c.isDualAccess ? '<span class="badge badge-active" style="margin-left:6px;">Protocol + Tracker</span>' : (c.planMode === 'tracker' ? '<span class="badge badge-active" style="margin-left:6px;">Tracker</span>' : '')}</div>
           <div class="roster-meta">${esc(c.email)} · <span class="badge badge-${c.status === 'active' ? 'active' : c.status === 'pending_payment' ? 'pending' : 'rejected'}">${esc(c.status)}</span>${c.fastingPause.active ? ` · Paused${c.fastingPause.pausedBy === 'admin' ? ' (by coach)' : ' (self)'}` : ''}${c.expired ? ' · <span class="badge badge-rejected">Expired</span>' : ''}</div>
           ${c.challengeLengthDays ? `<div class="roster-meta">Plan: ${c.challengeLengthDays}-day${c.daysLeft !== null ? ` · ${c.daysLeft} day${c.daysLeft === 1 ? '' : 's'} left` : ''}${c.dueDate ? ` · valid through ${c.dueDate}` : ''}</div>` : ''}
         </div>
       </div>
       <div class="roster-stats">
-        ${c.planMode === 'protocol' ? `
+        ${c.hasProtocolAccess ? `
           <div class="roster-stat"><div class="num">${c.day}</div><div class="lbl">Day</div></div>
           <div class="roster-stat"><div class="num">${c.completionPercent ?? 0}%</div><div class="lbl">Today</div></div>
         ` : ''}
@@ -106,8 +127,8 @@ function renderRoster() {
           <button class="roster-menu-btn" onclick="toggleRosterMenu(${c.id})">⋯</button>
           <div class="roster-menu-list">
             ${c.status === 'pending_payment' ? `<button onclick="activateClient(${c.id})">Activate now</button>` : ''}
-            ${c.planMode === 'protocol' ? `<button onclick="openAssignPlanModal(${c.id}, '${jsStr(c.name)}', ${c.day || 1})">Assign plan</button>` : ''}
-            ${c.planMode === 'protocol' ? `<button onclick="openProgramGuideModal(${c.id}, '${jsStr(c.name)}')">Program guide</button>` : ''}
+            ${c.hasProtocolAccess ? `<button onclick="openAssignPlanModal(${c.id}, '${jsStr(c.name)}', ${c.day || 1})">Assign plan</button>` : ''}
+            ${c.hasProtocolAccess ? `<button onclick="openProgramGuideModal(${c.id}, '${jsStr(c.name)}')">Program guide</button>` : ''}
             <button onclick="openAdminPauseModal(${c.id}, ${c.fastingPause.active})">${c.fastingPause.active ? 'Resume fasting' : 'Pause fasting'}</button>
             <button onclick="openClientDetail(${c.id})">View details, BMI &amp; medical notes</button>
             <button onclick="openResetPasswordModal(${c.id})">Reset password</button>
@@ -116,7 +137,7 @@ function renderRoster() {
         </div>
       </div>
     </div>
-  `).join('') : '<p class="hint">No clients yet.</p>';
+  `).join('') : '<p class="hint">No clients match.</p>';
 }
 
 /* ------------------------------------------------------------------ */
@@ -128,7 +149,7 @@ function renderProgramGuidePicker() {
   const listEl = document.getElementById('guide-client-list');
   if (!listEl) return; // view not in the DOM yet on first paint — fine, loadRoster() re-renders it
   const q = (document.getElementById('guide-client-search').value || '').toLowerCase();
-  const list = roster.filter(c => c.planMode === 'protocol' && (!q || c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q)));
+  const list = roster.filter(c => c.hasProtocolAccess && (!q || c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q)));
   listEl.innerHTML = list.length ? list.map(c => `
     <div class="roster-card">
       <div class="roster-main">
@@ -781,18 +802,20 @@ async function loadProgramGuideEditor(clientId) {
     el.innerHTML = data.days.map(d => `
       <div class="guide-editor-row ${d.day === data.currentDay ? 'current-day' : ''}">
         <div class="guide-editor-day">Day ${d.day}${d.day === data.currentDay ? ' <span class="badge badge-active">Today</span>' : ''}</div>
-        <label class="check-line" style="margin-bottom:6px;">
-          <input type="checkbox" id="guide-fullfast-${d.day}" ${d.isFullDayFast ? 'checked' : ''}
-            onchange="toggleGuideFullFast(${clientId}, ${d.day}, this.checked)"> Full-day fast (24h, no eating window)
-        </label>
-        <div class="guide-window-row" id="guide-window-${d.day}" style="display:${d.isFullDayFast ? 'none' : 'flex'};gap:8px;margin-bottom:8px;">
-          <div class="field" style="flex:1;margin:0;"><label>Eating window start (24h)</label>
-            <input type="number" step="0.5" id="guide-start-${d.day}" value="${d.startHour}" onblur="saveDayWindow(${clientId}, ${d.day})"></div>
-          <div class="field" style="flex:1;margin:0;"><label>Eating window end (24h)</label>
-            <input type="number" step="0.5" id="guide-end-${d.day}" value="${d.endHour}" onblur="saveDayWindow(${clientId}, ${d.day})"></div>
+        <div class="guide-editor-content">
+          <label class="check-line" style="margin-bottom:6px;">
+            <input type="checkbox" id="guide-fullfast-${d.day}" ${d.isFullDayFast ? 'checked' : ''}
+              onchange="toggleGuideFullFast(${clientId}, ${d.day}, this.checked)"> Full-day fast (24h, no eating window)
+          </label>
+          <div class="guide-window-row" id="guide-window-${d.day}" style="display:${d.isFullDayFast ? 'none' : 'flex'};gap:8px;margin-bottom:8px;">
+            <div class="field" style="flex:1;margin:0;"><label>Eating window start (24h)</label>
+              <input type="number" step="0.5" id="guide-start-${d.day}" value="${d.startHour}" onblur="saveDayWindow(${clientId}, ${d.day})"></div>
+            <div class="field" style="flex:1;margin:0;"><label>Eating window end (24h)</label>
+              <input type="number" step="0.5" id="guide-end-${d.day}" value="${d.endHour}" onblur="saveDayWindow(${clientId}, ${d.day})"></div>
+          </div>
+          <textarea placeholder="What's this day about?"
+            onblur="saveDayFocus(${clientId}, ${d.day}, this.value)">${esc(d.focus || '')}</textarea>
         </div>
-        <textarea placeholder="What's this day about?"
-          onblur="saveDayFocus(${clientId}, ${d.day}, this.value)">${esc(d.focus || '')}</textarea>
       </div>`).join('');
   } catch (err) {
     el.innerHTML = `<p class="error-text">${esc(err.message)}</p>`;
@@ -980,6 +1003,7 @@ async function loadPlans() {
         <button class="btn-ghost btn-sm" onclick="deletePlan(${p.id})">Delete</button>
       </div>
     </div>`).join('');
+  populateRosterPlanFilter();
   } catch (err) {
     document.getElementById('plans-list').innerHTML = errorBlock('plans', 'loadPlans()');
     throw err;
