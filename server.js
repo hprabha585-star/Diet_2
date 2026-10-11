@@ -8,6 +8,7 @@ const clientRoutes = require('./routes/client');
 const adminRoutes = require('./routes/admin');
 const trackerRoutes = require('./routes/tracker');
 const { Plan, Settings } = require('./models');
+const { backfillDualPlanAccess } = require('./utils/backfillAccess');
 
 // Safety net: since Node 15, an unhandled promise rejection crashes the
 // whole process by default. Every route here is meant to catch its own
@@ -123,6 +124,15 @@ connectDB().then(async () => {
     console.log('Database tables verified/created/updated.');
   } catch (err) {
     console.error('sequelize.sync({ alter: true }) failed — tables were NOT fully updated:', err.message);
+  }
+  try {
+    // Repairs any client whose dual-plan access (coached protocol +
+    // Fasting Tracker) got silently dropped by an older single-planMode
+    // approval flow — see utils/backfillAccess.js. Cheap no-op once every
+    // client's flags already match their approved-payment history.
+    await backfillDualPlanAccess();
+  } catch (err) {
+    console.error('backfillDualPlanAccess failed (non-fatal):', err.message);
   }
   app.listen(PORT, () => console.log(`FastCoach API running on port ${PORT}`));
 });

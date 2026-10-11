@@ -612,6 +612,19 @@ router.post('/payments/:id/approve', async (req, res) => {
     await payment.save();
 
     const approvedMode = plan ? plan.mode : 'protocol';
+
+    // Lock in whatever access this client ALREADY effectively has (via the
+    // old single-planMode fallback, hasXMode()) into the explicit flags
+    // BEFORE planMode gets overwritten below. Without this, a client who
+    // was approved for protocol back before these flags existed — so
+    // hasProtocolAccess was never explicitly set, only implied by
+    // planMode === 'protocol' — would silently LOSE that protocol access
+    // the moment they're approved for a second, different-mode plan: the
+    // planMode overwrite flips to 'tracker', the fallback stops matching,
+    // and nothing had ever set hasProtocolAccess = true to remember it.
+    if (client.hasProtocolMode()) client.hasProtocolAccess = true;
+    if (client.hasTrackerMode()) client.hasTrackerAccess = true;
+
     client.status = 'active';
     client.tier = payment.tier;
     client.planMode = approvedMode; // newest approval becomes the primary/default view
