@@ -296,7 +296,7 @@ async function submitRequestAdmin() {
     await apiRequest('/auth/request-admin', { method: 'POST', auth: false, body });
     const successEl = document.getElementById('ra-success');
     successEl.innerHTML = `Request submitted for <strong>${esc(body.email)}</strong>.<br><br>
-      To approve it: hPanel → Databases → phpMyAdmin → open the <code>Users</code> table →
+      To approve it: hPanel → Databases → phpMyAdmin → open the <code>users</code> table →
       find this row → change its <code>status</code> from <code>pending_approval</code> to
       <code>active</code>. It can then sign in as Coach / Admin.`;
     successEl.style.display = 'block';

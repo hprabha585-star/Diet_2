@@ -65,6 +65,43 @@ fastcoach/
    from the same Plans & pricing screen as the coached plans; both show
    up together on the landing page and the client's payment page.
 
+## Vercel + Aiven free tier: keeping the database awake
+
+Aiven powers free services off when they sit idle, and the old code also
+re-synced every table on every Vercel cold start. Both are handled now:
+
+- **`/api/keepalive`** does a real database write + read. Ping it regularly
+  and Aiven always sees activity.
+- **Auto power-on**: if the database is ever unreachable, the app calls the
+  Aiven API to power it back on (needs `AIVEN_API_TOKEN`, `AIVEN_PROJECT`,
+  `AIVEN_SERVICE`). Visitors see a "starting up the database…" banner and
+  pages retry by themselves for ~4 minutes.
+- **Fast cold starts**: tables are only re-synced when `models/index.js`
+  actually changes (a fingerprint is stored in the `app_meta` table).
+
+### One-time setup
+
+1. **Vercel → Project → Settings → Environment Variables**, add:
+   - `CRON_SECRET` — any long random string
+   - `AIVEN_API_TOKEN` — Aiven console → user menu (top right) → **Tokens** → Generate token
+   - `AIVEN_PROJECT` — your Aiven project name
+   - `AIVEN_SERVICE` — your MySQL service name (e.g. `mysql-fastcoach`)
+   - (keep your existing `DB_*` and `JWT_SECRET`)
+
+   Then **redeploy** so the new variables take effect.
+2. **Pinger — cron-job.org (free, recommended)**: create a cron job for
+   `https://YOUR-APP.vercel.app/api/keepalive`, every **15 minutes**. Under
+   *Advanced → Headers* add `Authorization` = `Bearer YOUR_CRON_SECRET`.
+3. **Second pinger — GitHub Actions** (if the code is on GitHub):
+   `.github/workflows/keepalive.yml` pings every 30 minutes. Add repo
+   secrets `KEEPALIVE_URL` and `CRON_SECRET` (Settings → Secrets and
+   variables → Actions).
+4. **Vercel Cron** (already in `vercel.json`) pings once a day — the most
+   the Hobby plan allows — as a last backstop.
+
+Check it: open `https://YOUR-APP.vercel.app/api/keepalive?key=YOUR_CRON_SECRET`
+— you should see `"ok": true, "database": "up"`.
+
 ## 1. Create the MySQL database (Hostinger hPanel)
 
 1. hPanel → **Databases → MySQL Databases** → create a database and a
@@ -121,7 +158,7 @@ npm run dev                # http://localhost:5000 — serves API + frontend tog
   it, open your database (hPanel → Databases → phpMyAdmin) and either:
   - use phpMyAdmin's row editor to change that user's `status` field
     from `pending_approval` to `active`, or
-  - run: `UPDATE Users SET status='active' WHERE email='their@email.com';`
+  - run: `UPDATE users SET status='active' WHERE email='their@email.com';`
 
   Never insert a new admin row directly — always let the app create the
   row (via seed, first-time create, or the request form) so the password

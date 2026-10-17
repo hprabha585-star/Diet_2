@@ -16,17 +16,46 @@ function clearSession() {
   localStorage.removeItem('fc_user');
 }
 
+// Shown while the free-tier database is powered off and starting back up
+// (the server asks Aiven to power it on and replies 503). Page loads (GET
+// requests) wait and retry automatically for up to ~4 minutes; saves are
+// never retried silently, so nothing gets submitted twice.
+function showDbWakingBanner(show) {
+  let el = document.getElementById('db-waking-banner');
+  if (!show) { if (el) el.remove(); return; }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'db-waking-banner';
+    el.style.cssText = 'position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:9999;' +
+      'background:#16211D;color:#F2F1E9;padding:12px 18px;border-radius:8px;font:500 14px Inter,Arial,sans-serif;' +
+      'box-shadow:0 6px 24px rgba(0,0,0,.25);max-width:90vw;text-align:center;';
+    el.textContent = 'Starting up the database — this takes a couple of minutes after a quiet period. Retrying automatically…';
+    document.body.appendChild(el);
+  }
+}
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
 async function apiRequest(path, { method = 'GET', body, auth = true } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (auth) {
     const token = getToken();
     if (token) headers['Authorization'] = `Bearer ${token}`;
   }
-  const res = await fetch(`${API_BASE}${path}`, {
-    method, headers, body: body ? JSON.stringify(body) : undefined
-  });
-  let data = {};
-  try { data = await res.json(); } catch { /* empty body */ }
+  let res, data = {};
+  for (let attempt = 0; ; attempt++) {
+    res = await fetch(`${API_BASE}${path}`, {
+      method, headers, body: body ? JSON.stringify(body) : undefined
+    });
+    data = {};
+    try { data = await res.json(); } catch { /* empty body */ }
+    if (res.status === 503 && method === 'GET' && attempt < 12) {
+      showDbWakingBanner(true);
+      await sleep(20000);
+      continue;
+    }
+    break;
+  }
+  showDbWakingBanner(false);
   if (!res.ok) {
     // Every backend route replies with { error, detail } on failure —
     // `detail` carries the real cause (a DB column that doesn't exist
