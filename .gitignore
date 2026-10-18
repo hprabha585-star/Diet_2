@@ -1,0 +1,6 @@
+# Secrets — never commit. Create api/config.php on the server only.
+api/config.php
+dev-router.php
+*.sql
+*.sql.gz
+.DS_Store

@@ -1,0 +1,47 @@
+[
+ {
+  "key": "standard",
+  "name": "Standard Tier",
+  "priceInr": 3999,
+  "durationDays": 55,
+  "order": 1,
+  "mode": "protocol",
+  "tagline": "The full 55-day coached cohort",
+  "features": [
+   "Dynamic fasting engine, tuned to you",
+   "Coach-assigned daily meals & habits",
+   "Daily habit accountability checklist",
+   "Full cohort leaderboard access"
+  ]
+ },
+ {
+  "key": "vip",
+  "name": "VIP / Clinical Tier",
+  "priceInr": 9999,
+  "durationDays": 55,
+  "order": 2,
+  "mode": "protocol",
+  "tagline": "Everything in Standard, plus 1-on-1 support",
+  "features": [
+   "Everything in Standard",
+   "Dedicated 1-on-1 dietitian support",
+   "Cloud health report archiving",
+   "Partner teleconsult & pharmacy perks"
+  ]
+ },
+ {
+  "key": "tracker",
+  "name": "Fasting Tracker",
+  "priceInr": 1999,
+  "durationDays": 30,
+  "order": 3,
+  "mode": "tracker",
+  "tagline": "Track your own fasting windows — no coach, no protocol",
+  "features": [
+   "Set any fast/eat schedule you like",
+   "Start / stop timer with history",
+   "Weight & BMI tracking",
+   "No coach guidance — fully self-directed"
+  ]
+ }
+]

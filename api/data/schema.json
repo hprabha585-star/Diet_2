@@ -1,0 +1,1315 @@
+{
+ "users": {
+  "model": "User",
+  "cols": {
+   "id": {
+    "col": "id",
+    "type": "int"
+   },
+   "name": {
+    "col": "name",
+    "type": "string"
+   },
+   "email": {
+    "col": "email",
+    "type": "string"
+   },
+   "phone": {
+    "col": "phone",
+    "type": "string"
+   },
+   "passwordHash": {
+    "col": "password_hash",
+    "type": "string"
+   },
+   "role": {
+    "col": "role",
+    "type": "string",
+    "default": "client"
+   },
+   "tier": {
+    "col": "tier",
+    "type": "string",
+    "default": "none"
+   },
+   "planMode": {
+    "col": "plan_mode",
+    "type": "string",
+    "default": "protocol"
+   },
+   "hasProtocolAccess": {
+    "col": "has_protocol_access",
+    "type": "bool",
+    "default": false
+   },
+   "hasTrackerAccess": {
+    "col": "has_tracker_access",
+    "type": "bool",
+    "default": false
+   },
+   "status": {
+    "col": "status",
+    "type": "string",
+    "default": "pending_payment"
+   },
+   "challengeStartDate": {
+    "col": "challenge_start_date",
+    "type": "date"
+   },
+   "challengeLengthDays": {
+    "col": "challenge_length_days",
+    "type": "int",
+    "default": 55
+   },
+   "timezone": {
+    "col": "timezone",
+    "type": "string",
+    "default": "Asia/Kolkata"
+   },
+   "pauseActive": {
+    "col": "pause_active",
+    "type": "bool",
+    "default": false
+   },
+   "pauseReason": {
+    "col": "pause_reason",
+    "type": "string"
+   },
+   "pauseStartedAt": {
+    "col": "pause_started_at",
+    "type": "datetime"
+   },
+   "pauseLastResumedAt": {
+    "col": "pause_last_resumed_at",
+    "type": "datetime"
+   },
+   "pausedDays": {
+    "col": "paused_days",
+    "type": "int",
+    "default": 0
+   },
+   "pausedBy": {
+    "col": "paused_by",
+    "type": "string",
+    "default": null
+   },
+   "medicalConditions": {
+    "col": "medical_conditions",
+    "type": "string",
+    "default": ""
+   },
+   "allergies": {
+    "col": "allergies",
+    "type": "string",
+    "default": ""
+   },
+   "medications": {
+    "col": "medications",
+    "type": "string",
+    "default": ""
+   },
+   "medicalNotes": {
+    "col": "medical_notes",
+    "type": "string",
+    "default": ""
+   },
+   "points": {
+    "col": "points",
+    "type": "int",
+    "default": 0
+   },
+   "streakCurrent": {
+    "col": "streak_current",
+    "type": "int",
+    "default": 0
+   },
+   "streakBest": {
+    "col": "streak_best",
+    "type": "int",
+    "default": 0
+   },
+   "badges": {
+    "col": "badges",
+    "type": "json",
+    "default": []
+   },
+   "referralCode": {
+    "col": "referral_code",
+    "type": "string"
+   },
+   "referredBy": {
+    "col": "referred_by",
+    "type": "int"
+   },
+   "walletBalanceInr": {
+    "col": "wallet_balance_inr",
+    "type": "int",
+    "default": 0
+   },
+   "startWeightKg": {
+    "col": "start_weight_kg",
+    "type": "float"
+   },
+   "heightCm": {
+    "col": "height_cm",
+    "type": "float"
+   },
+   "age": {
+    "col": "age",
+    "type": "int"
+   },
+   "gender": {
+    "col": "gender",
+    "type": "string",
+    "default": ""
+   },
+   "waterGoalMl": {
+    "col": "water_goal_ml",
+    "type": "int",
+    "default": 3000
+   },
+   "hadPaidPlan": {
+    "col": "had_paid_plan",
+    "type": "bool",
+    "default": false
+   },
+   "createdAt": {
+    "col": "created_at",
+    "type": "datetime"
+   },
+   "updatedAt": {
+    "col": "updated_at",
+    "type": "datetime"
+   }
+  }
+ },
+ "weight_logs": {
+  "model": "WeightLog",
+  "cols": {
+   "id": {
+    "col": "id",
+    "type": "int"
+   },
+   "date": {
+    "col": "date",
+    "type": "datetime",
+    "default": "__NOW__"
+   },
+   "weightKg": {
+    "col": "weight_kg",
+    "type": "float"
+   },
+   "note": {
+    "col": "note",
+    "type": "string"
+   },
+   "createdAt": {
+    "col": "created_at",
+    "type": "datetime"
+   },
+   "updatedAt": {
+    "col": "updated_at",
+    "type": "datetime"
+   },
+   "userId": {
+    "col": "user_id",
+    "type": "int"
+   }
+  }
+ },
+ "plans": {
+  "model": "Plan",
+  "cols": {
+   "id": {
+    "col": "id",
+    "type": "int"
+   },
+   "key": {
+    "col": "key",
+    "type": "string"
+   },
+   "name": {
+    "col": "name",
+    "type": "string"
+   },
+   "priceInr": {
+    "col": "price_inr",
+    "type": "int"
+   },
+   "durationDays": {
+    "col": "duration_days",
+    "type": "int",
+    "default": 55
+   },
+   "tagline": {
+    "col": "tagline",
+    "type": "string"
+   },
+   "features": {
+    "col": "features",
+    "type": "json",
+    "default": []
+   },
+   "mode": {
+    "col": "mode",
+    "type": "string",
+    "default": "protocol"
+   },
+   "active": {
+    "col": "active",
+    "type": "bool",
+    "default": true
+   },
+   "order": {
+    "col": "order",
+    "type": "int",
+    "default": 0
+   },
+   "brochure": {
+    "col": "brochure",
+    "type": "string"
+   },
+   "brochurePdfBase64": {
+    "col": "brochure_pdf_base64",
+    "type": "string"
+   },
+   "brochurePdfName": {
+    "col": "brochure_pdf_name",
+    "type": "string"
+   },
+   "isTrial": {
+    "col": "is_trial",
+    "type": "bool",
+    "default": false
+   },
+   "createdAt": {
+    "col": "created_at",
+    "type": "datetime"
+   },
+   "updatedAt": {
+    "col": "updated_at",
+    "type": "datetime"
+   }
+  }
+ },
+ "payments": {
+  "model": "Payment",
+  "cols": {
+   "id": {
+    "col": "id",
+    "type": "int"
+   },
+   "tier": {
+    "col": "tier",
+    "type": "string"
+   },
+   "planName": {
+    "col": "plan_name",
+    "type": "string"
+   },
+   "amountInr": {
+    "col": "amount_inr",
+    "type": "int"
+   },
+   "utr": {
+    "col": "utr",
+    "type": "string"
+   },
+   "screenshotBase64": {
+    "col": "screenshot_base64",
+    "type": "string"
+   },
+   "status": {
+    "col": "status",
+    "type": "string",
+    "default": "pending"
+   },
+   "reviewedBy": {
+    "col": "reviewed_by",
+    "type": "int"
+   },
+   "reviewedAt": {
+    "col": "reviewed_at",
+    "type": "datetime"
+   },
+   "adminNote": {
+    "col": "admin_note",
+    "type": "string"
+   },
+   "createdAt": {
+    "col": "created_at",
+    "type": "datetime"
+   },
+   "updatedAt": {
+    "col": "updated_at",
+    "type": "datetime"
+   },
+   "userId": {
+    "col": "user_id",
+    "type": "int"
+   }
+  }
+ },
+ "payouts": {
+  "model": "Payout",
+  "cols": {
+   "id": {
+    "col": "id",
+    "type": "int"
+   },
+   "amountInr": {
+    "col": "amount_inr",
+    "type": "int"
+   },
+   "upiId": {
+    "col": "upi_id",
+    "type": "string"
+   },
+   "status": {
+    "col": "status",
+    "type": "string",
+    "default": "pending"
+   },
+   "requestedAt": {
+    "col": "requested_at",
+    "type": "datetime",
+    "default": "__NOW__"
+   },
+   "resolvedAt": {
+    "col": "resolved_at",
+    "type": "datetime"
+   },
+   "resolvedBy": {
+    "col": "resolved_by",
+    "type": "int"
+   },
+   "createdAt": {
+    "col": "created_at",
+    "type": "datetime"
+   },
+   "updatedAt": {
+    "col": "updated_at",
+    "type": "datetime"
+   },
+   "userId": {
+    "col": "user_id",
+    "type": "int"
+   }
+  }
+ },
+ "regimens": {
+  "model": "Regimen",
+  "cols": {
+   "id": {
+    "col": "id",
+    "type": "int"
+   },
+   "day": {
+    "col": "day",
+    "type": "int"
+   },
+   "startHour": {
+    "col": "start_hour",
+    "type": "float"
+   },
+   "endHour": {
+    "col": "end_hour",
+    "type": "float"
+   },
+   "isFullDayFast": {
+    "col": "is_full_day_fast",
+    "type": "bool",
+    "default": false
+   },
+   "protocolType": {
+    "col": "protocol_type",
+    "type": "string",
+    "default": "eating_window"
+   },
+   "phase": {
+    "col": "phase",
+    "type": "string"
+   },
+   "focus": {
+    "col": "focus",
+    "type": "string"
+   },
+   "waterTargetMl": {
+    "col": "water_target_ml",
+    "type": "int",
+    "default": 3000
+   },
+   "createdAt": {
+    "col": "created_at",
+    "type": "datetime"
+   },
+   "updatedAt": {
+    "col": "updated_at",
+    "type": "datetime"
+   },
+   "userId": {
+    "col": "user_id",
+    "type": "int"
+   }
+  }
+ },
+ "regimen_meals": {
+  "model": "RegimenMeal",
+  "cols": {
+   "id": {
+    "col": "id",
+    "type": "int"
+   },
+   "type": {
+    "col": "type",
+    "type": "string"
+   },
+   "name": {
+    "col": "name",
+    "type": "string"
+   },
+   "calories": {
+    "col": "calories",
+    "type": "int"
+   },
+   "proteinG": {
+    "col": "protein_g",
+    "type": "float"
+   },
+   "notes": {
+    "col": "notes",
+    "type": "string"
+   },
+   "createdAt": {
+    "col": "created_at",
+    "type": "datetime"
+   },
+   "updatedAt": {
+    "col": "updated_at",
+    "type": "datetime"
+   },
+   "regimenId": {
+    "col": "regimen_id",
+    "type": "int"
+   }
+  }
+ },
+ "regimen_milestones": {
+  "model": "RegimenMilestone",
+  "cols": {
+   "id": {
+    "col": "id",
+    "type": "int"
+   },
+   "itemKey": {
+    "col": "item_key",
+    "type": "string"
+   },
+   "label": {
+    "col": "label",
+    "type": "string"
+   },
+   "createdAt": {
+    "col": "created_at",
+    "type": "datetime"
+   },
+   "updatedAt": {
+    "col": "updated_at",
+    "type": "datetime"
+   },
+   "regimenId": {
+    "col": "regimen_id",
+    "type": "int"
+   }
+  }
+ },
+ "checklist_logs": {
+  "model": "ChecklistLog",
+  "cols": {
+   "id": {
+    "col": "id",
+    "type": "int"
+   },
+   "day": {
+    "col": "day",
+    "type": "int"
+   },
+   "date": {
+    "col": "date",
+    "type": "datetime",
+    "default": "__NOW__"
+   },
+   "waterMl": {
+    "col": "water_ml",
+    "type": "int",
+    "default": 0
+   },
+   "completionPercent": {
+    "col": "completion_percent",
+    "type": "int",
+    "default": 0
+   },
+   "streakCounted": {
+    "col": "streak_counted",
+    "type": "bool",
+    "default": false
+   },
+   "createdAt": {
+    "col": "created_at",
+    "type": "datetime"
+   },
+   "updatedAt": {
+    "col": "updated_at",
+    "type": "datetime"
+   },
+   "userId": {
+    "col": "user_id",
+    "type": "int"
+   }
+  }
+ },
+ "checklist_items": {
+  "model": "ChecklistItem",
+  "cols": {
+   "id": {
+    "col": "id",
+    "type": "int"
+   },
+   "itemKey": {
+    "col": "item_key",
+    "type": "string"
+   },
+   "label": {
+    "col": "label",
+    "type": "string"
+   },
+   "kind": {
+    "col": "kind",
+    "type": "string",
+    "default": "habit"
+   },
+   "done": {
+    "col": "done",
+    "type": "bool",
+    "default": false
+   },
+   "custom": {
+    "col": "custom",
+    "type": "bool",
+    "default": false
+   },
+   "createdAt": {
+    "col": "created_at",
+    "type": "datetime"
+   },
+   "updatedAt": {
+    "col": "updated_at",
+    "type": "datetime"
+   },
+   "checklistLogId": {
+    "col": "checklist_log_id",
+    "type": "int"
+   }
+  }
+ },
+ "water_entries": {
+  "model": "WaterEntry",
+  "cols": {
+   "id": {
+    "col": "id",
+    "type": "int"
+   },
+   "ml": {
+    "col": "ml",
+    "type": "int"
+   },
+   "at": {
+    "col": "at",
+    "type": "datetime",
+    "default": "__NOW__"
+   },
+   "createdAt": {
+    "col": "created_at",
+    "type": "datetime"
+   },
+   "updatedAt": {
+    "col": "updated_at",
+    "type": "datetime"
+   },
+   "checklistLogId": {
+    "col": "checklist_log_id",
+    "type": "int"
+   }
+  }
+ },
+ "alerts": {
+  "model": "Alert",
+  "cols": {
+   "id": {
+    "col": "id",
+    "type": "int"
+   },
+   "userId": {
+    "col": "user_id",
+    "type": "int"
+   },
+   "title": {
+    "col": "title",
+    "type": "string"
+   },
+   "body": {
+    "col": "body",
+    "type": "string"
+   },
+   "level": {
+    "col": "level",
+    "type": "string",
+    "default": "info"
+   },
+   "createdBy": {
+    "col": "created_by",
+    "type": "int"
+   },
+   "createdAt": {
+    "col": "created_at",
+    "type": "datetime"
+   },
+   "updatedAt": {
+    "col": "updated_at",
+    "type": "datetime"
+   }
+  }
+ },
+ "alert_reads": {
+  "model": "AlertRead",
+  "cols": {
+   "id": {
+    "col": "id",
+    "type": "int"
+   },
+   "alertId": {
+    "col": "alert_id",
+    "type": "int"
+   },
+   "userId": {
+    "col": "user_id",
+    "type": "int"
+   }
+  }
+ },
+ "messages": {
+  "model": "Message",
+  "cols": {
+   "id": {
+    "col": "id",
+    "type": "int"
+   },
+   "clientId": {
+    "col": "client_id",
+    "type": "int"
+   },
+   "sender": {
+    "col": "sender",
+    "type": "string"
+   },
+   "body": {
+    "col": "body",
+    "type": "string"
+   },
+   "readByAdmin": {
+    "col": "read_by_admin",
+    "type": "bool",
+    "default": false
+   },
+   "readByClient": {
+    "col": "read_by_client",
+    "type": "bool",
+    "default": false
+   },
+   "createdAt": {
+    "col": "created_at",
+    "type": "datetime"
+   },
+   "updatedAt": {
+    "col": "updated_at",
+    "type": "datetime"
+   }
+  }
+ },
+ "protocol_days": {
+  "model": "ProtocolDay",
+  "cols": {
+   "id": {
+    "col": "id",
+    "type": "int"
+   },
+   "day": {
+    "col": "day",
+    "type": "int"
+   },
+   "phase": {
+    "col": "phase",
+    "type": "string"
+   },
+   "protocolType": {
+    "col": "protocol_type",
+    "type": "string"
+   },
+   "label": {
+    "col": "label",
+    "type": "string"
+   },
+   "startHour": {
+    "col": "start_hour",
+    "type": "float",
+    "default": 9
+   },
+   "endHour": {
+    "col": "end_hour",
+    "type": "float",
+    "default": 17
+   },
+   "isFullDayFast": {
+    "col": "is_full_day_fast",
+    "type": "bool",
+    "default": false
+   },
+   "eatingHours": {
+    "col": "eating_hours",
+    "type": "float"
+   },
+   "fastingHours": {
+    "col": "fasting_hours",
+    "type": "float"
+   },
+   "focus": {
+    "col": "focus",
+    "type": "string"
+   },
+   "waterTargetMl": {
+    "col": "water_target_ml",
+    "type": "int",
+    "default": 3000
+   },
+   "createdAt": {
+    "col": "created_at",
+    "type": "datetime"
+   },
+   "updatedAt": {
+    "col": "updated_at",
+    "type": "datetime"
+   }
+  }
+ },
+ "journal_topics": {
+  "model": "JournalTopic",
+  "cols": {
+   "id": {
+    "col": "id",
+    "type": "int"
+   },
+   "title": {
+    "col": "title",
+    "type": "string"
+   },
+   "description": {
+    "col": "description",
+    "type": "string"
+   },
+   "youtubeUrl": {
+    "col": "youtube_url",
+    "type": "string"
+   },
+   "order": {
+    "col": "order",
+    "type": "int",
+    "default": 0
+   },
+   "active": {
+    "col": "active",
+    "type": "bool",
+    "default": true
+   },
+   "createdAt": {
+    "col": "created_at",
+    "type": "datetime"
+   },
+   "updatedAt": {
+    "col": "updated_at",
+    "type": "datetime"
+   }
+  }
+ },
+ "achievements": {
+  "model": "Achievement",
+  "cols": {
+   "id": {
+    "col": "id",
+    "type": "int"
+   },
+   "type": {
+    "col": "type",
+    "type": "string"
+   },
+   "title": {
+    "col": "title",
+    "type": "string"
+   },
+   "description": {
+    "col": "description",
+    "type": "string"
+   },
+   "hours": {
+    "col": "hours",
+    "type": "float"
+   },
+   "earnedAt": {
+    "col": "earned_at",
+    "type": "datetime",
+    "default": "__NOW__"
+   },
+   "dedupeKey": {
+    "col": "dedupe_key",
+    "type": "string"
+   },
+   "createdAt": {
+    "col": "created_at",
+    "type": "datetime"
+   },
+   "updatedAt": {
+    "col": "updated_at",
+    "type": "datetime"
+   },
+   "userId": {
+    "col": "user_id",
+    "type": "int"
+   }
+  }
+ },
+ "settings": {
+  "model": "Settings",
+  "cols": {
+   "id": {
+    "col": "id",
+    "type": "int"
+   },
+   "singleton": {
+    "col": "singleton",
+    "type": "string",
+    "default": "main"
+   },
+   "coachName": {
+    "col": "coach_name",
+    "type": "string",
+    "default": ""
+   },
+   "phone": {
+    "col": "phone",
+    "type": "string",
+    "default": ""
+   },
+   "whatsapp": {
+    "col": "whatsapp",
+    "type": "string",
+    "default": ""
+   },
+   "email": {
+    "col": "email",
+    "type": "string",
+    "default": ""
+   },
+   "upiId": {
+    "col": "upi_id",
+    "type": "string",
+    "default": ""
+   },
+   "address": {
+    "col": "address",
+    "type": "string",
+    "default": ""
+   },
+   "supportHours": {
+    "col": "support_hours",
+    "type": "string",
+    "default": ""
+   },
+   "note": {
+    "col": "note",
+    "type": "string",
+    "default": ""
+   },
+   "defaultDayTemplate": {
+    "col": "default_day_template",
+    "type": "json",
+    "default": null
+   },
+   "protocolPhaseGoals": {
+    "col": "protocol_phase_goals",
+    "type": "json",
+    "default": null
+   },
+   "protocolSafetyNotes": {
+    "col": "protocol_safety_notes",
+    "type": "json",
+    "default": null
+   },
+   "siteName": {
+    "col": "site_name",
+    "type": "string",
+    "default": "FastCoach"
+   },
+   "logoBase64": {
+    "col": "logo_base64",
+    "type": "string",
+    "default": null
+   },
+   "createdAt": {
+    "col": "created_at",
+    "type": "datetime"
+   },
+   "updatedAt": {
+    "col": "updated_at",
+    "type": "datetime"
+   }
+  }
+ },
+ "tracker_sessions": {
+  "model": "TrackerSession",
+  "cols": {
+   "id": {
+    "col": "id",
+    "type": "int"
+   },
+   "startAt": {
+    "col": "start_at",
+    "type": "datetime"
+   },
+   "endAt": {
+    "col": "end_at",
+    "type": "datetime"
+   },
+   "targetHours": {
+    "col": "target_hours",
+    "type": "float"
+   },
+   "status": {
+    "col": "status",
+    "type": "string",
+    "default": "running"
+   },
+   "scheduleKey": {
+    "col": "schedule_key",
+    "type": "string",
+    "default": "16:8"
+   },
+   "eatingHours": {
+    "col": "eating_hours",
+    "type": "float",
+    "default": 8
+   },
+   "eatingStartedAt": {
+    "col": "eating_started_at",
+    "type": "datetime"
+   },
+   "eatingEndsAt": {
+    "col": "eating_ends_at",
+    "type": "datetime"
+   },
+   "localDate": {
+    "col": "local_date",
+    "type": "date"
+   },
+   "note": {
+    "col": "note",
+    "type": "string"
+   },
+   "createdAt": {
+    "col": "created_at",
+    "type": "datetime"
+   },
+   "updatedAt": {
+    "col": "updated_at",
+    "type": "datetime"
+   },
+   "userId": {
+    "col": "user_id",
+    "type": "int"
+   }
+  }
+ },
+ "tracker_profiles": {
+  "model": "TrackerProfile",
+  "cols": {
+   "id": {
+    "col": "id",
+    "type": "int"
+   },
+   "scheduleKey": {
+    "col": "schedule_key",
+    "type": "string",
+    "default": "16:8"
+   },
+   "fastHours": {
+    "col": "fast_hours",
+    "type": "float",
+    "default": 16
+   },
+   "eatHours": {
+    "col": "eat_hours",
+    "type": "float",
+    "default": 8
+   },
+   "startHour": {
+    "col": "start_hour",
+    "type": "float",
+    "default": 20
+   },
+   "dailyGoalHours": {
+    "col": "daily_goal_hours",
+    "type": "float",
+    "default": 16
+   },
+   "waterGoalMl": {
+    "col": "water_goal_ml",
+    "type": "int",
+    "default": 3000
+   },
+   "waterUnit": {
+    "col": "water_unit",
+    "type": "string",
+    "default": "ml"
+   },
+   "calorieGoal": {
+    "col": "calorie_goal",
+    "type": "int",
+    "default": 2000
+   },
+   "proteinGoalG": {
+    "col": "protein_goal_g",
+    "type": "int",
+    "default": 100
+   },
+   "carbGoalG": {
+    "col": "carb_goal_g",
+    "type": "int",
+    "default": 250
+   },
+   "fatGoalG": {
+    "col": "fat_goal_g",
+    "type": "int",
+    "default": 66
+   },
+   "weeklySchedule": {
+    "col": "weekly_schedule",
+    "type": "json",
+    "default": {}
+   },
+   "schedulePaused": {
+    "col": "schedule_paused",
+    "type": "bool",
+    "default": false
+   },
+   "reminders": {
+    "col": "reminders",
+    "type": "json",
+    "default": {
+     "water": {
+      "enabled": false,
+      "everyHours": 2,
+      "fromHour": 8,
+      "toHour": 22
+     },
+     "fastStart": {
+      "enabled": false
+     },
+     "fastEndingSoon": {
+      "enabled": false,
+      "minutesBefore": 30
+     },
+     "fastCompleted": {
+      "enabled": false
+     },
+     "eatingEnding": {
+      "enabled": false,
+      "minutesBefore": 30
+     }
+    }
+   },
+   "goalFocus": {
+    "col": "goal_focus",
+    "type": "string",
+    "default": "Build a consistent fasting routine"
+   },
+   "dismissedTips": {
+    "col": "dismissed_tips",
+    "type": "json",
+    "default": []
+   },
+   "createdAt": {
+    "col": "created_at",
+    "type": "datetime"
+   },
+   "updatedAt": {
+    "col": "updated_at",
+    "type": "datetime"
+   },
+   "userId": {
+    "col": "user_id",
+    "type": "int"
+   }
+  }
+ },
+ "meal_entries": {
+  "model": "MealEntry",
+  "cols": {
+   "id": {
+    "col": "id",
+    "type": "int"
+   },
+   "date": {
+    "col": "date",
+    "type": "date"
+   },
+   "category": {
+    "col": "category",
+    "type": "string"
+   },
+   "name": {
+    "col": "name",
+    "type": "string"
+   },
+   "quantity": {
+    "col": "quantity",
+    "type": "string"
+   },
+   "calories": {
+    "col": "calories",
+    "type": "float",
+    "default": 0
+   },
+   "proteinG": {
+    "col": "protein_g",
+    "type": "float",
+    "default": 0
+   },
+   "carbsG": {
+    "col": "carbs_g",
+    "type": "float",
+    "default": 0
+   },
+   "fatG": {
+    "col": "fat_g",
+    "type": "float",
+    "default": 0
+   },
+   "notes": {
+    "col": "notes",
+    "type": "string"
+   },
+   "createdAt": {
+    "col": "created_at",
+    "type": "datetime"
+   },
+   "updatedAt": {
+    "col": "updated_at",
+    "type": "datetime"
+   },
+   "userId": {
+    "col": "user_id",
+    "type": "int"
+   }
+  }
+ },
+ "rest_days": {
+  "model": "RestDay",
+  "cols": {
+   "id": {
+    "col": "id",
+    "type": "int"
+   },
+   "date": {
+    "col": "date",
+    "type": "date"
+   },
+   "note": {
+    "col": "note",
+    "type": "string"
+   },
+   "createdAt": {
+    "col": "created_at",
+    "type": "datetime"
+   },
+   "updatedAt": {
+    "col": "updated_at",
+    "type": "datetime"
+   },
+   "userId": {
+    "col": "user_id",
+    "type": "int"
+   }
+  }
+ },
+ "tracker_task_logs": {
+  "model": "TrackerTaskLog",
+  "cols": {
+   "id": {
+    "col": "id",
+    "type": "int"
+   },
+   "date": {
+    "col": "date",
+    "type": "date"
+   },
+   "taskKey": {
+    "col": "task_key",
+    "type": "string"
+   },
+   "createdAt": {
+    "col": "created_at",
+    "type": "datetime"
+   },
+   "updatedAt": {
+    "col": "updated_at",
+    "type": "datetime"
+   },
+   "userId": {
+    "col": "user_id",
+    "type": "int"
+   }
+  }
+ },
+ "tracker_water_entries": {
+  "model": "TrackerWaterEntry",
+  "cols": {
+   "id": {
+    "col": "id",
+    "type": "int"
+   },
+   "ml": {
+    "col": "ml",
+    "type": "int"
+   },
+   "at": {
+    "col": "at",
+    "type": "datetime",
+    "default": "__NOW__"
+   },
+   "localDate": {
+    "col": "local_date",
+    "type": "date"
+   },
+   "createdAt": {
+    "col": "created_at",
+    "type": "datetime"
+   },
+   "updatedAt": {
+    "col": "updated_at",
+    "type": "datetime"
+   },
+   "userId": {
+    "col": "user_id",
+    "type": "int"
+   }
+  }
+ }
+}

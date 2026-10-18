@@ -1,0 +1,7 @@
+# Only used if your control panel has "Git Version Control" (cPanel-style).
+# Copies the repo into public_html on "Deploy HEAD". Change USERNAME.
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/USERNAME/public_html/
+    - /bin/cp -R api client admin css js install index.html app-login.html .htaccess $DEPLOYPATH

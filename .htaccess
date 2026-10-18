@@ -1,0 +1,31 @@
+# FastCoach — Shared hosting (Apache/LiteSpeed) routing.
+Options -Indexes
+DirectoryIndex index.html
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # Pass the "Authorization: Bearer ..." header through to PHP
+  # (shared hosting strips it otherwise, and every login would fail).
+  RewriteCond %{HTTP:Authorization} .
+  RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+  # Every /api/... request goes to the PHP API.
+  RewriteCond %{REQUEST_URI} !/api/index\.php$
+  RewriteRule ^api(/.*)?$ api/index.php [QSA,L]
+
+  # Never serve the install folder directly.
+  RewriteRule ^install(/.*)?$ - [F,L]
+
+  # Anything else that isn't a real file goes to the landing page
+  # (same as the old Node server's fallback).
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^ index.html [L]
+</IfModule>
+
+# Allow large plan brochure PDFs (base64 in JSON).
+<IfModule mod_php.c>
+  php_value post_max_size 20M
+  php_value upload_max_filesize 20M
+</IfModule>

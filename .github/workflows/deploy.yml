@@ -1,0 +1,37 @@
+# Uploads the site to MilesWeb over FTP on every push to main.
+# Only changed files are uploaded. api/config.php on the server is never
+# touched (it isn't in the repo and is excluded below).
+#
+# GitHub repo -> Settings -> Secrets and variables -> Actions -> New secret:
+#   FTP_SERVER    e.g. ftp.yourdomain.com  (from MilesWeb panel -> FTP Accounts)
+#   FTP_USERNAME  your FTP username
+#   FTP_PASSWORD  your FTP password
+#   FTP_DIR       folder to upload into, ending with "/":
+#                 "public_html/" if the FTP login opens your home folder,
+#                 "./" if the FTP account opens public_html directly.
+name: Deploy to MilesWeb
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Upload over FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          server-dir: ${{ secrets.FTP_DIR }}
+          exclude: |
+            **/.git*
+            **/.git*/**
+            .github/**
+            api/config.php
+            README*.md
