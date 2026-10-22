@@ -47,7 +47,16 @@ async function apiRequest(path, { method = 'GET', body, auth = true } = {}) {
       method, headers, body: body ? JSON.stringify(body) : undefined
     });
     data = {};
-    try { data = await res.json(); } catch { /* empty body */ }
+    const text = await res.text();
+    if (text) {
+      try { data = JSON.parse(text); }
+      catch {
+        // The server sent a web page (or PHP source) instead of JSON — the
+        // API isn't being reached. Say so plainly instead of a cryptic
+        // "cannot read properties of undefined" later on.
+        throw new Error(`Server problem: /api${path} returned a web page instead of data (HTTP ${res.status}). Open /api/health on this site to check.`);
+      }
+    }
     if (res.status === 503 && method === 'GET' && attempt < 12) {
       showDbWakingBanner(true);
       await sleep(20000);
