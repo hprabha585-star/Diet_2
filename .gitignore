@@ -3,4 +3,5 @@ api/config.php
 dev-router.php
 *.sql
 *.sql.gz
+!install/schema.sql
 .DS_Store
