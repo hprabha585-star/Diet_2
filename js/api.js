@@ -176,10 +176,23 @@ function fmtHour12(hourFloat) {
 // or ".nav-logo" appears. Public endpoint — works before login too, so
 // the sign-in page itself is branded. Cosmetic only: never blocks or
 // breaks the page if it fails.
+let SITE_SETTINGS = null;
 async function applyBranding() {
   try {
     const s = await apiRequest('/site-settings', { auth: false });
     if (!s) return;
+    SITE_SETTINGS = s;
+    document.querySelectorAll('[data-site-contact]').forEach(el => { el.innerHTML = renderContactLinks(s); });
+    document.querySelectorAll('[data-site-tagline]').forEach(el => {
+      el.textContent = s.tagline || '';
+      el.style.display = s.tagline ? '' : 'none';
+    });
+    document.querySelectorAll('[data-site-logo-big]').forEach(el => {
+      el.innerHTML = s.logoBase64
+        ? `<img src="${s.logoBase64}" alt="${esc(s.siteName || 'FastCoach')}">`
+        : `<span class="brand-mark-letter">${esc((s.siteName || 'F').trim().charAt(0).toUpperCase())}</span>`;
+    });
+    document.querySelectorAll('[data-site-name]').forEach(el => { el.textContent = s.siteName || 'FastCoach'; });
     const name = esc(s.siteName || 'FastCoach');
     document.title = document.title.replace(/FastCoach/g, s.siteName || 'FastCoach');
     document.querySelectorAll('.nav-logo, .brand').forEach(el => {
@@ -194,4 +207,56 @@ function fmtCountdown(totalSeconds) {
   const s = Math.max(0, Math.round(totalSeconds));
   const hh = Math.floor(s / 3600), mm = Math.floor((s % 3600) / 60), ss = s % 60;
   return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+}
+
+
+/* ------------------------------------------------------------------ */
+/* Public contact links (phone, WhatsApp, email, Instagram, YouTube).   */
+/* Filled in by the coach under Contact details + Site settings.        */
+/* ------------------------------------------------------------------ */
+const CONTACT_ICONS = {
+  phone: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.6a1 1 0 0 1-.25 1z"/></svg>',
+  whatsapp: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.15l-.3-.18-3 .78.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.25-.12-1.46-.72-1.69-.8s-.39-.12-.55.12-.63.8-.78.96-.29.18-.53.06a6.7 6.7 0 0 1-3.34-2.92c-.25-.43.25-.4.72-1.34a.45.45 0 0 0-.02-.43c-.06-.12-.55-1.33-.76-1.82s-.4-.41-.55-.42h-.47a.9.9 0 0 0-.65.3 2.74 2.74 0 0 0-.86 2.04 4.76 4.76 0 0 0 1 2.53 10.9 10.9 0 0 0 4.17 3.68c1.55.67 2.16.73 2.93.61a2.5 2.5 0 0 0 1.65-1.16 2 2 0 0 0 .14-1.16c-.06-.1-.22-.16-.47-.28z"/></svg>',
+  email: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm1 2.4V17h16V7.4l-8 5.3zM5.2 7 12 11.5 18.8 7z"/></svg>',
+  instagram: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7.3a4.7 4.7 0 1 0 0 9.4 4.7 4.7 0 0 0 0-9.4zm0 7.7a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm6-7.9a1.1 1.1 0 1 1-2.2 0 1.1 1.1 0 0 1 2.2 0zM21.9 8.2a5.4 5.4 0 0 0-1.5-3.9 5.5 5.5 0 0 0-3.9-1.5C15 2.7 9 2.7 7.5 2.8a5.5 5.5 0 0 0-3.9 1.5A5.4 5.4 0 0 0 2.1 8.2C2 9.7 2 15.4 2.1 16.9a5.4 5.4 0 0 0 1.5 3.9 5.5 5.5 0 0 0 3.9 1.5c1.5.1 7.5.1 9 0a5.4 5.4 0 0 0 3.9-1.5 5.5 5.5 0 0 0 1.5-3.9c.1-1.5.1-7.2 0-8.7zm-2.3 11a3 3 0 0 1-1.7 1.7c-1.2.5-4 .4-5.9.4s-4.7.1-5.9-.4a3 3 0 0 1-1.7-1.7c-.5-1.2-.4-4-.4-5.2s-.1-4 .4-5.2a3 3 0 0 1 1.7-1.7C7.3 4.6 10.1 4.7 12 4.7s4.7-.1 5.9.4a3 3 0 0 1 1.7 1.7c.5 1.2.4 4 .4 5.2s.1 4-.4 5.2z"/></svg>',
+  youtube: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M23 7.2a3 3 0 0 0-2.1-2.1C19 4.6 12 4.6 12 4.6s-7 0-8.9.5A3 3 0 0 0 1 7.2 31 31 0 0 0 .5 12a31 31 0 0 0 .5 4.8 3 3 0 0 0 2.1 2.1c1.9.5 8.9.5 8.9.5s7 0 8.9-.5a3 3 0 0 0 2.1-2.1 31 31 0 0 0 .5-4.8 31 31 0 0 0-.5-4.8zM9.7 15V9l5.8 3z"/></svg>'
+};
+
+function normalizeUrl(u) {
+  u = (u || '').trim();
+  if (!u) return '';
+  if (/^https?:\/\//i.test(u)) return u;
+  return 'https://' + u.replace(/^\/+/, '');
+}
+function instagramUrl(v) {
+  v = (v || '').trim();
+  if (!v) return '';
+  if (/instagram\.com/i.test(v)) return normalizeUrl(v);
+  return 'https://instagram.com/' + v.replace(/^@/, '');
+}
+function youtubeUrl(v) {
+  v = (v || '').trim();
+  if (!v) return '';
+  if (/youtube\.com|youtu\.be/i.test(v)) return normalizeUrl(v);
+  return 'https://youtube.com/' + (v.startsWith('@') ? v : '@' + v);
+}
+function digitsOnly(v) { return (v || '').replace(/[^\d+]/g, ''); }
+function whatsappUrl(v) {
+  let d = (v || '').replace(/\D/g, '');
+  if (d.length === 10) d = '91' + d; // Indian mobile without country code
+  return d ? 'https://wa.me/' + d : '';
+}
+
+/** Contact list as HTML. Only shows the items the coach actually filled in. */
+function renderContactLinks(s) {
+  if (!s) return '';
+  const items = [];
+  if (s.phone) items.push(`<a class="contact-link" href="tel:${esc(digitsOnly(s.phone))}">${CONTACT_ICONS.phone}<span>${esc(s.phone)}</span></a>`);
+  if (s.whatsapp) items.push(`<a class="contact-link" href="${esc(whatsappUrl(s.whatsapp))}" target="_blank" rel="noopener">${CONTACT_ICONS.whatsapp}<span>WhatsApp</span></a>`);
+  if (s.email) items.push(`<a class="contact-link" href="mailto:${esc(s.email)}">${CONTACT_ICONS.email}<span>${esc(s.email)}</span></a>`);
+  if (s.instagramUrl) items.push(`<a class="contact-link" href="${esc(instagramUrl(s.instagramUrl))}" target="_blank" rel="noopener">${CONTACT_ICONS.instagram}<span>Instagram</span></a>`);
+  if (s.youtubeUrl) items.push(`<a class="contact-link" href="${esc(youtubeUrl(s.youtubeUrl))}" target="_blank" rel="noopener">${CONTACT_ICONS.youtube}<span>YouTube</span></a>`);
+  const extra = [s.address, s.supportHours].filter(Boolean).map(x => `<div class="contact-extra">${esc(x)}</div>`).join('');
+  if (!items.length && !extra) return '';
+  return `<div class="contact-links">${items.join('')}</div>${extra}`;
 }

@@ -25,15 +25,36 @@ body { min-height: 100vh; display: flex; flex-direction: column; }
 .modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 12px; }
 .modal-head h3 { font-size: 19px; margin: 0; }
 .modal-close { background: none; border: none; font-size: 22px; color: #6B6F63; cursor: pointer; line-height: 1; }
+
+/* Centred brand header (logo + name + tagline) */
+.app-brand { text-align: center; padding: 40px 24px 8px; }
+.app-brand-logo {
+  width: 96px; height: 96px; margin: 0 auto 14px; border-radius: 22px;
+  background: var(--paper-raised); border: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.app-brand-logo img { width: 100%; height: 100%; object-fit: contain; padding: 8px; }
+.brand-mark-letter { font-family: var(--font-display); font-size: 44px; font-weight: 600; color: var(--ember); }
+.app-brand-name { font-family: var(--font-display); font-size: 26px; font-weight: 600; letter-spacing: -0.3px; }
+.app-brand-tagline { font-size: 14px; color: #6B6F63; margin: 6px auto 0; max-width: 36ch; }
+.app-access { padding: 20px 0 28px; align-items: flex-start; }
+.app-access h2 { text-align: center; font-size: 22px; }
+.app-access .role-toggle, .app-access .tab-bar { justify-content: center; margin-left: auto; margin-right: auto; }
+.app-contact { padding: 0 0 40px; }
+.app-contact .container { max-width: 480px; }
+.app-contact .card { padding: 20px; }
+.app-contact h3 { font-size: 16px; margin-bottom: 12px; text-align: center; }
+.app-contact .contact-links { justify-content: center; }
+.app-contact .contact-extra { text-align: center; }
 </style>
 </head>
 <body>
 
-<nav class="nav">
-  <div class="container">
-    <div class="nav-logo">FastCoach</div>
-  </div>
-</nav>
+<header class="app-brand">
+  <div class="app-brand-logo" data-site-logo-big><span class="brand-mark-letter">F</span></div>
+  <div class="app-brand-name" data-site-name>FastCoach</div>
+  <p class="app-brand-tagline" data-site-tagline style="display:none;"></p>
+</header>
 
 <section class="app-access">
   <div class="container">
@@ -84,6 +105,16 @@ body { min-height: 100vh; display: flex; flex-direction: column; }
         <div class="error-text" id="reg-error" style="display:none;"></div>
         <button class="btn btn-primary" type="submit" style="width:100%;">Create account</button>
       </form>
+    </div>
+  </div>
+</section>
+
+<!-- Contact details — filled from Admin → Contact details + Site settings -->
+<section class="app-contact" id="app-contact" style="display:none;">
+  <div class="container">
+    <div class="card">
+      <h3>Need help? Contact us</h3>
+      <div data-site-contact></div>
     </div>
   </div>
 </section>
@@ -275,7 +306,9 @@ async function doRegister(e) {
 // redirect (in js/api.js) come back here instead of the marketing page.
 localStorage.setItem('fc_app_mode', '1');
 
-applyBranding();
+applyBranding().then(() => {
+  if (renderContactLinks(SITE_SETTINGS)) document.getElementById('app-contact').style.display = '';
+});
 setRole('client');
 
 // A referral link (?ref=CODE) pre-fills the code and jumps straight to

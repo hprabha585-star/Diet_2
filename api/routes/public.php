@@ -39,8 +39,29 @@ route('GET', '/plans', function () {
 route('GET', '/site-settings', function () {
     try {
         $s = settings_get_or_create();
-        return ['siteName' => $s['siteName'] ?: 'FastCoach', 'logoBase64' => $s['logoBase64'] ?: null];
+        return [
+            'siteName' => $s['siteName'] ?: 'FastCoach',
+            'logoBase64' => $s['logoBase64'] ?: null,
+            // Public contact details — shown on the website and the app's sign-in page.
+            'tagline' => $s['siteTagline'] ?? '',
+            'coachName' => $s['coachName'] ?? '',
+            'phone' => $s['phone'] ?? '',
+            'whatsapp' => $s['whatsapp'] ?? '',
+            'email' => $s['email'] ?? '',
+            'address' => $s['address'] ?? '',
+            'supportHours' => $s['supportHours'] ?? '',
+            'instagramUrl' => $s['instagramUrl'] ?? '',
+            'youtubeUrl' => $s['youtubeUrl'] ?? '',
+            'showTestimonials' => array_key_exists('showTestimonials', $s) ? (bool)$s['showTestimonials'] : true,
+        ];
     } catch (Throwable $e) {
         return ['siteName' => 'FastCoach', 'logoBase64' => null];
     }
 });
+
+// Public: success stories (before/after weight) for the landing page
+route('GET', '/testimonials', function () {
+    $s = settings_get_or_create();
+    if (array_key_exists('showTestimonials', $s) && !$s['showTestimonials']) return ['testimonials' => []];
+    return ['testimonials' => find_all('testimonials', ['active' => true], [['order', 'ASC'], ['id', 'DESC']])];
+}, ['err' => 'Could not load testimonials']);

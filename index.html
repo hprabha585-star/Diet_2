@@ -18,6 +18,8 @@
     <div class="nav-logo">FastCoach</div>
     <div class="nav-links">
       <a href="#pricing">Pricing</a>
+      <a href="#results" id="nav-results" style="display:none;">Results</a>
+      <a href="#contact" id="nav-contact" style="display:none;">Contact</a>
       <a href="#access" class="btn btn-dark btn-sm">Sign in</a>
     </div>
   </div>
@@ -66,6 +68,18 @@
     <div class="pricing-grid" id="pricing-grid">
       <p class="hint">Loading plans…</p>
     </div>
+  </div>
+</section>
+
+<!-- Success stories — managed in Admin → Site settings → Testimonials -->
+<section class="section" id="results" style="display:none;border-top:1px solid var(--line);">
+  <div class="container">
+    <div class="section-head">
+      <div class="kicker">Results</div>
+      <h2>Real clients, real kilos lost</h2>
+      <p>Before and after, from people who finished the programme.</p>
+    </div>
+    <div class="testimonial-grid" id="testimonial-grid"></div>
   </div>
 </section>
 
@@ -133,9 +147,23 @@
   </div>
 </section>
 
+<!-- Contact — phone/WhatsApp/email from Admin → Contact details,
+     Instagram/YouTube from Admin → Site settings -->
+<section class="section" id="contact" style="display:none;border-top:1px solid var(--line);">
+  <div class="container contact-band">
+    <div>
+      <div class="kicker">Contact</div>
+      <h2>Talk to your coach</h2>
+      <p style="color:#55594E;">Questions about a plan, payment or getting started? Call, message, or follow along.</p>
+    </div>
+    <div data-site-contact></div>
+  </div>
+</section>
+
 <footer>
   <div class="container">
-    <div>© FastCoach</div>
+    <div>© <span data-site-name>FastCoach</span></div>
+    <div class="footer-social" id="footer-social"></div>
     <div>Direct UPI · coach-approved</div>
   </div>
 </footer>
@@ -384,7 +412,65 @@ function openBrochure(planId) {
     (p.brochure || '').split('\n').filter(l => l.trim()).map(l => `<p>${esc(l)}</p>`).join('');
   document.getElementById('brochure-modal').classList.add('open');
 }
-applyBranding();
+/* ---- Success stories ---- */
+function weightDiffBadge(t) {
+  if (t.beforeKg == null || t.afterKg == null) return '';
+  const diff = Math.round((t.beforeKg - t.afterKg) * 10) / 10;
+  if (diff === 0) return '';
+  return diff > 0
+    ? `<span class="t-loss">−${diff} kg lost</span>`
+    : `<span class="t-loss gain">+${Math.abs(diff)} kg gained</span>`;
+}
+function testimonialCard(t) {
+  const photos = (t.beforePhoto || t.afterPhoto) ? `
+    <div class="t-photos">
+      <div class="t-photo">${t.beforePhoto ? `<img src="${t.beforePhoto}" alt="${esc(t.name)} before" loading="lazy">` : ''}<span>Before</span></div>
+      <div class="t-photo">${t.afterPhoto ? `<img src="${t.afterPhoto}" alt="${esc(t.name)} after" loading="lazy">` : ''}<span>After</span></div>
+    </div>` : '';
+  const weights = (t.beforeKg != null || t.afterKg != null) ? `
+    <div class="t-weights">
+      ${t.beforeKg != null ? `<span>Before <b>${t.beforeKg} kg</b></span>` : ''}
+      ${t.beforeKg != null && t.afterKg != null ? '<span class="t-arrow">→</span>' : ''}
+      ${t.afterKg != null ? `<span>After <b>${t.afterKg} kg</b></span>` : ''}
+    </div>` : '';
+  return `
+    <article class="testimonial">
+      ${photos}
+      <div class="t-body">
+        ${weightDiffBadge(t)}
+        ${weights}
+        ${t.quote ? `<p class="t-quote">“${esc(t.quote)}”</p>` : ''}
+        <div class="t-name">${esc(t.name)}${t.durationText ? ` <small>· ${esc(t.durationText)}</small>` : ''}</div>
+      </div>
+    </article>`;
+}
+async function loadTestimonials() {
+  try {
+    const data = await apiRequest('/testimonials', { auth: false });
+    const list = data.testimonials || [];
+    if (!list.length) return;
+    document.getElementById('testimonial-grid').innerHTML = list.map(testimonialCard).join('');
+    document.getElementById('results').style.display = '';
+    document.getElementById('nav-results').style.display = '';
+  } catch (err) { /* section stays hidden */ }
+}
+
+/* ---- Contact section + footer links ---- */
+async function initBrandingAndContact() {
+  await applyBranding();
+  const s = SITE_SETTINGS;
+  const html = renderContactLinks(s);
+  if (html) {
+    document.getElementById('contact').style.display = '';
+    document.getElementById('nav-contact').style.display = '';
+  }
+  if (s && (s.instagramUrl || s.youtubeUrl)) {
+    document.getElementById('footer-social').innerHTML = renderContactLinks({ instagramUrl: s.instagramUrl, youtubeUrl: s.youtubeUrl });
+  }
+}
+
+initBrandingAndContact();
+loadTestimonials();
 loadPlans();
 setRole('client');
 

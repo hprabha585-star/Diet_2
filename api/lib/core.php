@@ -58,13 +58,50 @@ function q($sql, $params = []) {
 /** Creates any missing table on first run (like the Node app did on boot). */
 function ensure_schema() {
     $exists = q("SELECT COUNT(*) c FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'users'")->fetch()['c'];
-    if ((int)$exists) return;
+    if ((int)$exists) { ensure_upgrades(); return; }
     $sql = file_get_contents(__DIR__ . '/../../install/schema.sql');
     db()->exec('SET FOREIGN_KEY_CHECKS = 0');
     foreach (array_filter(array_map('trim', explode(";\n", $sql))) as $stmt) {
         if ($stmt !== '') db()->exec($stmt);
     }
     db()->exec('SET FOREIGN_KEY_CHECKS = 1');
+}
+
+/**
+ * Existing databases (e.g. one imported from a .sql backup) were created
+ * before newer features existed. Add whatever is missing — new settings
+ * columns and the testimonials table — so nobody has to touch phpMyAdmin.
+ * One cheap information_schema query per request when already up to date.
+ */
+function ensure_upgrades() {
+    $needed = [
+        ['settings', 'site_tagline', "ALTER TABLE `settings` ADD COLUMN `site_tagline` varchar(255) DEFAULT ''"],
+        ['settings', 'instagram_url', "ALTER TABLE `settings` ADD COLUMN `instagram_url` varchar(255) DEFAULT ''"],
+        ['settings', 'youtube_url', "ALTER TABLE `settings` ADD COLUMN `youtube_url` varchar(255) DEFAULT ''"],
+        ['settings', 'show_testimonials', "ALTER TABLE `settings` ADD COLUMN `show_testimonials` tinyint(1) DEFAULT 1"],
+        ['testimonials', 'id', "CREATE TABLE IF NOT EXISTS `testimonials` (
+            `id` int(11) NOT NULL AUTO_INCREMENT,
+            `name` varchar(255) DEFAULT '',
+            `before_kg` float DEFAULT NULL,
+            `after_kg` float DEFAULT NULL,
+            `duration_text` varchar(255) DEFAULT '',
+            `quote` text DEFAULT NULL,
+            `before_photo` longtext DEFAULT NULL,
+            `after_photo` longtext DEFAULT NULL,
+            `sort_order` int(11) DEFAULT 0,
+            `active` tinyint(1) DEFAULT 1,
+            `created_at` datetime NOT NULL,
+            `updated_at` datetime NOT NULL,
+            PRIMARY KEY (`id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"],
+    ];
+    $have = [];
+    $rows = q("SELECT table_name t, column_name c FROM information_schema.columns
+               WHERE table_schema = DATABASE() AND table_name IN ('settings','testimonials')")->fetchAll();
+    foreach ($rows as $r) $have[strtolower($r['t']) . '.' . strtolower($r['c'])] = true;
+    foreach ($needed as [$t, $c, $sql]) {
+        if (empty($have["$t.$c"])) db()->exec($sql);
+    }
 }
 
 /* ---------------- time helpers ---------------- */

@@ -92,3 +92,16 @@ input, select, textarea { font-family: inherit; }
    .brand appears (sign-in page nav, every dashboard's sidebar). */
 .site-logo-img { height: 28px; width: auto; vertical-align: middle; margin-right: 8px; border-radius: 4px; }
 .brand .site-logo-img { height: 24px; }
+
+/* Public contact links (website footer, contact section, app sign-in page) */
+.contact-links { display: flex; flex-wrap: wrap; gap: 10px; }
+.contact-link {
+  display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px;
+  border: 1px solid var(--line); border-radius: 100px; background: var(--paper-raised);
+  font-size: 14px; font-weight: 500; text-decoration: none; color: var(--ink);
+  min-height: 40px;
+}
+.contact-link:hover { border-color: var(--ember); color: var(--ember); }
+.contact-link svg { width: 18px; height: 18px; fill: currentColor; flex-shrink: 0; }
+.contact-link span { overflow-wrap: anywhere; }
+.contact-extra { font-size: 13px; color: #6B6F63; margin-top: 10px; }

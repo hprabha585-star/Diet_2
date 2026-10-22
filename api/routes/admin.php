@@ -591,6 +591,49 @@ route('PUT', '/branding', function () {
     $ch = [];
     if (is_string(in_body('siteName'))) $ch['siteName'] = trim(in_body('siteName')) ?: 'FastCoach';
     if (has_body('logoBase64') && (in_body('logoBase64') === null || is_string(in_body('logoBase64')))) $ch['logoBase64'] = in_body('logoBase64') ?: null;
+    foreach (['siteTagline', 'instagramUrl', 'youtubeUrl'] as $f) if (is_string(in_body($f))) $ch[$f] = trim(in_body($f));
+    if (has_body('showTestimonials')) $ch['showTestimonials'] = (bool)in_body('showTestimonials');
     $s = save('settings', $s, $ch);
     return ['siteName' => $s['siteName'], 'logoBase64' => $s['logoBase64']];
 }, ['err' => 'Could not save branding']);
+
+/* ---------------- Testimonials (before / after) ---------------- */
+function testimonial_fields() {
+    $ch = [];
+    foreach (['name', 'durationText', 'quote'] as $f) if (is_string(in_body($f))) $ch[$f] = trim(in_body($f));
+    foreach (['beforeKg', 'afterKg'] as $f) if (has_body($f)) {
+        $v = in_body($f);
+        $ch[$f] = ($v === null || $v === '' || !is_numeric($v)) ? null : round((float)$v, 1);
+    }
+    foreach (['beforePhoto', 'afterPhoto'] as $f) if (has_body($f)) {
+        $v = in_body($f);
+        if ($v !== null && (!is_string($v) || ($v !== '' && strpos($v, 'data:image/') !== 0))) respond(400, ['error' => 'Photos must be images']);
+        $ch[$f] = $v ?: null;
+    }
+    if (has_body('order') && is_numeric(in_body('order'))) $ch['order'] = (int)in_body('order');
+    if (has_body('active')) $ch['active'] = (bool)in_body('active');
+    return $ch;
+}
+
+route('GET', '/testimonials', function () {
+    return ['testimonials' => find_all('testimonials', [], [['order', 'ASC'], ['id', 'DESC']])];
+});
+
+route('POST', '/testimonials', function () {
+    $ch = testimonial_fields();
+    if (empty($ch['name'])) respond(400, ['error' => 'Name is required']);
+    respond(201, ['testimonial' => create('testimonials', $ch)]);
+}, ['err' => 'Could not save testimonial']);
+
+route('PUT', '/testimonials/:id', function ($p) {
+    $t = find_pk('testimonials', $p['id']);
+    if (!$t) respond(404, ['error' => 'Testimonial not found']);
+    $ch = testimonial_fields();
+    if (array_key_exists('name', $ch) && $ch['name'] === '') respond(400, ['error' => 'Name is required']);
+    return ['testimonial' => save('testimonials', $t, $ch)];
+}, ['err' => 'Could not save testimonial']);
+
+route('DELETE', '/testimonials/:id', function ($p) {
+    destroy('testimonials', ['id' => js_int($p['id'])]);
+    return ['ok' => true];
+});

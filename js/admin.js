@@ -39,6 +39,7 @@ async function init() {
     () => safeLoad(loadReferrals, 'referrals'),
     () => safeLoad(loadSettings, 'settings'),
     () => safeLoad(loadSiteSettings, 'site settings'),
+    () => safeLoad(loadTestimonials, 'testimonials'),
     () => safeLoad(loadThreads, 'messages')
   ], 4);
   chatPoll = setInterval(() => { if (currentThreadClientId) loadThread(currentThreadClientId, true); loadThreads(); }, 15000);
@@ -1325,6 +1326,22 @@ async function loadSiteSettings() {
           </div>
         </div>
       </div>
+      <div class="field" style="max-width:520px;"><label>Short description (shown under the logo on the app sign-in page)</label>
+        <input type="text" id="site-tagline-input" value="${esc(s.tagline || '')}" placeholder="e.g. Coach-led fasting programmes for lasting weight loss">
+      </div>
+      <div class="field" style="max-width:520px;"><label>Instagram</label>
+        <input type="text" id="site-instagram-input" value="${esc(s.instagramUrl || '')}" placeholder="@yourhandle or https://instagram.com/yourhandle">
+      </div>
+      <div class="field" style="max-width:520px;"><label>YouTube</label>
+        <input type="text" id="site-youtube-input" value="${esc(s.youtubeUrl || '')}" placeholder="@yourchannel or https://youtube.com/@yourchannel">
+      </div>
+      <div class="field">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:600;">
+          <input type="checkbox" id="site-show-testimonials" style="width:auto;" ${s.showTestimonials === false ? '' : 'checked'}>
+          Show testimonials (before / after) on the website's main page
+        </label>
+      </div>
+      <p class="hint" style="margin:-4px 0 16px;">Phone, WhatsApp, email, address and support hours come from <a href="#settings" onclick="showView('settings')">Contact details</a> — they appear on the website and the app sign-in page automatically.</p>
       <button class="btn btn-primary btn-sm" onclick="saveSiteSettings()">Save site settings</button>`;
   } catch (err) {
     el.innerHTML = `<p class="error-text">${esc(err.message)}</p>`;
@@ -1350,12 +1367,205 @@ function removeLogo() {
 
 async function saveSiteSettings() {
   try {
-    const body = { siteName: document.getElementById('site-name-input').value };
+    const body = {
+      siteName: document.getElementById('site-name-input').value,
+      siteTagline: document.getElementById('site-tagline-input').value,
+      instagramUrl: document.getElementById('site-instagram-input').value,
+      youtubeUrl: document.getElementById('site-youtube-input').value,
+      showTestimonials: document.getElementById('site-show-testimonials').checked
+    };
     if (pendingLogoBase64 !== undefined) body.logoBase64 = pendingLogoBase64;
     await apiRequest('/admin/branding', { method: 'PUT', body });
     await applyBranding(); // refresh this page's own sidebar immediately
     await loadSiteSettings();
     alert('Saved. The new name/logo will show everywhere, including the sign-in page.');
+  } catch (err) { alert(err.message); }
+}
+
+/* ------------------------------------------------------------------ */
+/* Testimonials — before / after weight stories for the landing page    */
+/* ------------------------------------------------------------------ */
+let testimonialsCache = [];
+let editingTestimonialId = null;
+let pendingTPhotos = { beforePhoto: undefined, afterPhoto: undefined }; // undefined = unchanged, null = remove
+
+async function loadTestimonials() {
+  const el = document.getElementById('testimonials-card');
+  if (!el) return;
+  try {
+    const data = await apiRequest('/admin/testimonials');
+    testimonialsCache = data.testimonials || [];
+    renderTestimonialsCard();
+  } catch (err) {
+    el.innerHTML = `<p class="error-text">${esc(err.message)}</p>`;
+    throw err;
+  }
+}
+
+function tDiffText(t) {
+  if (t.beforeKg == null || t.afterKg == null) return '—';
+  const d = Math.round((t.beforeKg - t.afterKg) * 10) / 10;
+  return d > 0 ? `−${d} kg` : d < 0 ? `+${Math.abs(d)} kg` : '0 kg';
+}
+
+function renderTestimonialsCard() {
+  const el = document.getElementById('testimonials-card');
+  const t = editingTestimonialId ? testimonialsCache.find(x => x.id === editingTestimonialId) || {} : {};
+  const list = testimonialsCache.length ? `
+    <div style="overflow-x:auto;margin-bottom:22px;">
+    <table class="table">
+      <thead><tr><th>Name</th><th>Before</th><th>After</th><th>Difference</th><th>Photos</th><th>Shown</th><th></th></tr></thead>
+      <tbody>${testimonialsCache.map(x => `
+        <tr>
+          <td><b>${esc(x.name)}</b>${x.durationText ? `<div class="hint">${esc(x.durationText)}</div>` : ''}</td>
+          <td>${x.beforeKg != null ? x.beforeKg + ' kg' : '—'}</td>
+          <td>${x.afterKg != null ? x.afterKg + ' kg' : '—'}</td>
+          <td><b>${tDiffText(x)}</b></td>
+          <td>${[x.beforePhoto ? 'Before' : '', x.afterPhoto ? 'After' : ''].filter(Boolean).join(' + ') || '—'}</td>
+          <td><span class="badge ${x.active ? 'badge-active' : 'badge-pending'}">${x.active ? 'Yes' : 'Hidden'}</span></td>
+          <td style="white-space:nowrap;">
+            <button class="btn btn-outline btn-sm" onclick="editTestimonial(${x.id})">Edit</button>
+            <button class="btn-ghost btn-sm" onclick="deleteTestimonial(${x.id})">Delete</button>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>` : '<p class="hint" style="margin-bottom:18px;">No testimonials yet — add your first success story below.</p>';
+
+  const photoField = (key, label) => `
+    <div class="field"><label>${label} photo (optional)</label>
+      <div class="logo-row">
+        <div class="logo-preview" id="tp-${key}">${t[key] ? `<img src="${t[key]}" alt="">` : '<span class="hint">None</span>'}</div>
+        <div>
+          <input type="file" accept="image/png,image/jpeg,image/webp" onchange="handleTPhoto(this, '${key}')">
+          <div class="hint" style="margin-top:6px;">Resized automatically. Get the client's permission first.</div>
+          <button type="button" class="btn-ghost btn-sm" style="margin-top:6px;" onclick="removeTPhoto('${key}')">Remove photo</button>
+        </div>
+      </div>
+    </div>`;
+
+  el.innerHTML = `${list}
+    <h3 style="font-size:17px;margin-bottom:14px;">${editingTestimonialId ? 'Edit testimonial' : 'Add testimonial'}</h3>
+    <div class="detail-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0 16px;">
+      <div class="field"><label>Client name *</label><input type="text" id="t-name" value="${esc(t.name || '')}" placeholder="e.g. Priya S."></div>
+      <div class="field"><label>Weight before (kg)</label><input type="number" step="0.1" min="0" id="t-before" value="${t.beforeKg ?? ''}" oninput="updateTDiff()"></div>
+      <div class="field"><label>Weight after (kg)</label><input type="number" step="0.1" min="0" id="t-after" value="${t.afterKg ?? ''}" oninput="updateTDiff()"></div>
+      <div class="field"><label>Duration</label><input type="text" id="t-duration" value="${esc(t.durationText || '')}" placeholder="e.g. 55 days"></div>
+    </div>
+    <p class="hint" id="t-diff" style="margin:-6px 0 14px;"></p>
+    <div class="field"><label>What they said (optional)</label><textarea id="t-quote" rows="3" placeholder="A line or two from the client">${esc(t.quote || '')}</textarea></div>
+    <div class="detail-grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:0 16px;">
+      ${photoField('beforePhoto', 'Before')}
+      ${photoField('afterPhoto', 'After')}
+    </div>
+    <div class="detail-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0 16px;">
+      <div class="field"><label>Display order</label><input type="number" id="t-order" value="${t.order ?? 0}"><div class="hint">Lower numbers show first.</div></div>
+      <div class="field"><label style="display:flex;align-items:center;gap:8px;margin-top:30px;">
+        <input type="checkbox" id="t-active" style="width:auto;" ${t.active === false ? '' : 'checked'}> Show on website</label></div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn btn-primary btn-sm" id="t-save-btn" onclick="saveTestimonial()">${editingTestimonialId ? 'Save changes' : 'Add testimonial'}</button>
+      ${editingTestimonialId ? '<button class="btn btn-outline btn-sm" onclick="cancelTestimonialEdit()">Cancel</button>' : ''}
+    </div>`;
+  updateTDiff();
+}
+
+function updateTDiff() {
+  const b = parseFloat(document.getElementById('t-before')?.value);
+  const a = parseFloat(document.getElementById('t-after')?.value);
+  const el = document.getElementById('t-diff');
+  if (!el) return;
+  el.textContent = (isNaN(a) || isNaN(b)) ? '' : `Difference shown on the website: ${tDiffText({ beforeKg: b, afterKg: a })}`;
+}
+
+// Shrinks a photo to max 700px JPEG so pages stay fast and uploads stay small.
+function resizeImageFile(file, maxSide = 700, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read that file'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('That file is not a supported image'));
+      img.onload = () => {
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleTPhoto(input, key) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  if (file.size > 15 * 1024 * 1024) { alert('Please use an image under 15MB.'); input.value = ''; return; }
+  try {
+    const data = await resizeImageFile(file);
+    pendingTPhotos[key] = data;
+    document.getElementById(`tp-${key}`).innerHTML = `<img src="${data}" alt="">`;
+  } catch (err) { alert(err.message); input.value = ''; }
+}
+
+function removeTPhoto(key) {
+  pendingTPhotos[key] = null;
+  document.getElementById(`tp-${key}`).innerHTML = '<span class="hint">None</span>';
+}
+
+function editTestimonial(id) {
+  editingTestimonialId = id;
+  pendingTPhotos = { beforePhoto: undefined, afterPhoto: undefined };
+  renderTestimonialsCard();
+  document.getElementById('t-name').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function cancelTestimonialEdit() {
+  editingTestimonialId = null;
+  pendingTPhotos = { beforePhoto: undefined, afterPhoto: undefined };
+  renderTestimonialsCard();
+}
+
+async function saveTestimonial() {
+  const name = document.getElementById('t-name').value.trim();
+  if (!name) { alert('Please enter the client name.'); return; }
+  const body = {
+    name,
+    beforeKg: document.getElementById('t-before').value,
+    afterKg: document.getElementById('t-after').value,
+    durationText: document.getElementById('t-duration').value,
+    quote: document.getElementById('t-quote').value,
+    order: document.getElementById('t-order').value || 0,
+    active: document.getElementById('t-active').checked
+  };
+  if (pendingTPhotos.beforePhoto !== undefined) body.beforePhoto = pendingTPhotos.beforePhoto;
+  if (pendingTPhotos.afterPhoto !== undefined) body.afterPhoto = pendingTPhotos.afterPhoto;
+  const btn = document.getElementById('t-save-btn');
+  btn.disabled = true;
+  try {
+    if (editingTestimonialId) await apiRequest(`/admin/testimonials/${editingTestimonialId}`, { method: 'PUT', body });
+    else await apiRequest('/admin/testimonials', { method: 'POST', body });
+    editingTestimonialId = null;
+    pendingTPhotos = { beforePhoto: undefined, afterPhoto: undefined };
+    await loadTestimonials();
+  } catch (err) {
+    alert(err.message);
+    btn.disabled = false;
+  }
+}
+
+async function deleteTestimonial(id) {
+  const t = testimonialsCache.find(x => x.id === id);
+  if (!confirm(`Delete the testimonial for ${t ? t.name : 'this client'}?`)) return;
+  try {
+    await apiRequest(`/admin/testimonials/${id}`, { method: 'DELETE' });
+    if (editingTestimonialId === id) editingTestimonialId = null;
+    await loadTestimonials();
   } catch (err) { alert(err.message); }
 }
 
