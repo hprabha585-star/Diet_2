@@ -31,6 +31,8 @@ route('GET', '/plans', function () {
     $order = [['order', 'ASC'], ['priceInr', 'ASC']];
     plans_seed_if_empty();
     $plans = find_all('plans', ['active' => true], $order);
+    // Renewal packs are for existing clients only — never on the public site.
+    $plans = array_values(array_filter($plans, fn($p) => empty($p['isRenewal'])));
     foreach ($plans as &$p) unset($p['brochurePdfBase64']);
     return ['plans' => $plans];
 }, ['err' => 'Could not load plans']);

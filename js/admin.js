@@ -994,7 +994,7 @@ async function loadPlans() {
     <div class="roster-card">
       <div class="roster-main">
         <div style="min-width:0;">
-          <div class="roster-name">${esc(p.name)} <span class="badge badge-${p.mode === 'tracker' ? 'pending' : 'active'}">${p.mode === 'tracker' ? 'Fasting Tracker' : 'Coached'}</span>${p.isTrial ? ' <span class="badge badge-pending">Trial</span>' : ''}</div>
+          <div class="roster-name">${esc(p.name)} <span class="badge badge-${p.mode === 'tracker' ? 'pending' : 'active'}">${p.mode === 'tracker' ? 'Fasting Tracker' : 'Coached'}</span>${p.isTrial ? ' <span class="badge badge-pending">Trial</span>' : ''}${p.isRenewal ? ' <span class="badge badge-active">Renewal · existing clients only</span>' : ''}</div>
           <div class="roster-meta">₹${p.priceInr} · ${p.durationDays} days · ${esc(p.tagline || '')}</div>
         </div>
       </div>
@@ -1024,6 +1024,7 @@ function openPlanModal(plan) {
   document.getElementById('plan-price').value = plan ? plan.priceInr : '';
   document.getElementById('plan-duration').value = plan ? plan.durationDays : 55;
   document.getElementById('plan-is-trial').checked = plan ? !!plan.isTrial : false;
+  document.getElementById('plan-is-renewal').checked = plan ? !!plan.isRenewal : false;
   document.getElementById('plan-tagline').value = plan ? plan.tagline || '' : '';
   document.getElementById('plan-features').value = plan ? (plan.features || []).join('\n') : '';
   document.getElementById('plan-brochure').value = plan ? plan.brochure || '' : '';
@@ -1085,7 +1086,8 @@ async function submitPlan() {
       tagline: document.getElementById('plan-tagline').value,
       features: document.getElementById('plan-features').value.split('\n').map(s => s.trim()).filter(Boolean),
       brochure: document.getElementById('plan-brochure').value,
-      isTrial: document.getElementById('plan-is-trial').checked
+      isTrial: document.getElementById('plan-is-trial').checked,
+      isRenewal: document.getElementById('plan-is-renewal').checked
     };
     if (pendingBrochurePdfBase64 !== undefined) {
       body.brochurePdfBase64 = pendingBrochurePdfBase64;

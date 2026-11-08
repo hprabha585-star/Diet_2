@@ -1129,7 +1129,7 @@ async function loadPaymentView() {
       ${statusHtml}
       <div class="field"><label>Plan</label>
         <div style="display:flex;gap:8px;">
-          <select id="pay-plan" style="flex:1;" onchange="syncPlanDetailsButton()">${plansData.plans.map(p => `<option value="${p.key}">${esc(p.name)} — ₹${p.priceInr} (${p.mode === 'tracker' ? 'self-guided' : 'coached'})</option>`).join('')}</select>
+          <select id="pay-plan" style="flex:1;" onchange="syncPlanDetailsButton()">${planOptionsHtml(plansData.plans)}</select>
           <button class="btn btn-outline btn-sm" id="pay-plan-details-btn" onclick="openPlanDetails()" hidden>Details</button>
         </div>
       </div>
@@ -1141,6 +1141,17 @@ async function loadPaymentView() {
     document.getElementById('payment-card').innerHTML = errorBlock('payment details', 'loadPaymentView()');
     throw err;
   }
+}
+
+// Paying clients get two groups — renewal packs and the main plans (to
+// upgrade). New users only ever receive main plans from the server.
+function planOptionsHtml(plans) {
+  const opt = p => `<option value="${p.key}">${esc(p.name)} — ₹${p.priceInr} (${p.mode === 'tracker' ? 'self-guided' : 'coached'})</option>`;
+  const renewals = plans.filter(p => p.isRenewal);
+  const main = plans.filter(p => !p.isRenewal);
+  if (!renewals.length) return main.map(opt).join('');
+  return `<optgroup label="Renew your plan">${renewals.map(opt).join('')}</optgroup>` +
+    (main.length ? `<optgroup label="Main plans / upgrade">${main.map(opt).join('')}</optgroup>` : '');
 }
 
 function syncPlanDetailsButton() {

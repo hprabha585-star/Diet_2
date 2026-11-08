@@ -446,7 +446,8 @@ route('POST', '/plans', function () {
         'key' => strtolower(trim($b['key'])), 'name' => $b['name'], 'priceInr' => $b['priceInr'], 'durationDays' => $t('durationDays', 55),
         'tagline' => $t('tagline', ''), 'features' => $t('features', []), 'brochure' => $t('brochure', ''),
         'brochurePdfBase64' => $t('brochurePdfBase64', null), 'brochurePdfName' => $t('brochurePdfName', null),
-        'mode' => ($b['mode'] ?? null) === 'tracker' ? 'tracker' : 'protocol', 'order' => $t('order', 0), 'isTrial' => truthy($b['isTrial'] ?? null)
+        'mode' => ($b['mode'] ?? null) === 'tracker' ? 'tracker' : 'protocol', 'order' => $t('order', 0), 'isTrial' => truthy($b['isTrial'] ?? null),
+        'isRenewal' => truthy($b['isRenewal'] ?? null)
     ]);
     respond(201, ['plan' => $plan]);
 }, ['err' => 'Could not create plan']);
@@ -459,6 +460,7 @@ route('PUT', '/plans/:id', function ($p) {
     foreach (['tagline', 'brochure'] as $f) if (is_string($b[$f] ?? null)) $ch[$f] = $b[$f];
     if (is_array($b['features'] ?? null)) $ch['features'] = $b['features'];
     if (is_bool($b['isTrial'] ?? null)) $ch['isTrial'] = $b['isTrial'];
+    if (is_bool($b['isRenewal'] ?? null)) $ch['isRenewal'] = $b['isRenewal'];
     if (array_key_exists('brochurePdfBase64', $b)) {
         $ch['brochurePdfBase64'] = $b['brochurePdfBase64'];
         $ch['brochurePdfName'] = truthy($b['brochurePdfBase64']) ? (truthy($b['brochurePdfName'] ?? null) ? $b['brochurePdfName'] : $plan['brochurePdfName']) : null;

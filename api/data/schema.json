@@ -282,6 +282,11 @@
         "type": "bool",
         "default": false
       },
+      "isRenewal": {
+        "col": "is_renewal",
+        "type": "bool",
+        "default": false
+      },
       "createdAt": {
         "col": "created_at",
         "type": "datetime"

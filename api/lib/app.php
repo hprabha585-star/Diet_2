@@ -198,6 +198,14 @@ function backfill_dual_plan_access() {
 }
 
 /* ---------------- Settings / Plans / ProtocolDay helpers ---------------- */
+/** Existing / active / past-paying client — the only people renewal packs are offered to. */
+function is_paying_client($user) {
+    if (!$user) return false;
+    if (!empty($user['hadPaidPlan'])) return true;
+    if (($user['role'] ?? '') === 'client' && ($user['status'] ?? '') === 'active') return true;
+    return count_rows('payments', ['userId' => $user['id'], 'status' => 'approved']) > 0;
+}
+
 function settings_get_or_create() {
     $s = find_one('settings', ['singleton' => 'main']);
     if (!$s) $s = create('settings', ['singleton' => 'main']);

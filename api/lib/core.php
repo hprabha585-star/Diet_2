@@ -79,6 +79,10 @@ function ensure_upgrades() {
         ['settings', 'instagram_url', "ALTER TABLE `settings` ADD COLUMN `instagram_url` varchar(255) DEFAULT ''"],
         ['settings', 'youtube_url', "ALTER TABLE `settings` ADD COLUMN `youtube_url` varchar(255) DEFAULT ''"],
         ['settings', 'show_testimonials', "ALTER TABLE `settings` ADD COLUMN `show_testimonials` tinyint(1) DEFAULT 1"],
+        // Renewal packs: only offered to clients who have paid before. Plans
+        // already named "...renew..." are marked automatically the first time.
+        ['plans', 'is_renewal', "ALTER TABLE `plans` ADD COLUMN `is_renewal` tinyint(1) DEFAULT 0",
+            "UPDATE `plans` SET `is_renewal` = 1 WHERE LOWER(`name`) LIKE '%renew%' OR LOWER(`key`) LIKE '%renew%'"],
         ['testimonials', 'id', "CREATE TABLE IF NOT EXISTS `testimonials` (
             `id` int(11) NOT NULL AUTO_INCREMENT,
             `name` varchar(255) DEFAULT '',
@@ -97,10 +101,14 @@ function ensure_upgrades() {
     ];
     $have = [];
     $rows = q("SELECT table_name t, column_name c FROM information_schema.columns
-               WHERE table_schema = DATABASE() AND table_name IN ('settings','testimonials')")->fetchAll();
+               WHERE table_schema = DATABASE() AND table_name IN ('settings','testimonials','plans')")->fetchAll();
     foreach ($rows as $r) $have[strtolower($r['t']) . '.' . strtolower($r['c'])] = true;
-    foreach ($needed as [$t, $c, $sql]) {
-        if (empty($have["$t.$c"])) db()->exec($sql);
+    foreach ($needed as $n) {
+        [$t, $c, $sql] = $n;
+        if (empty($have["$t.$c"])) {
+            db()->exec($sql);
+            if (!empty($n[3])) db()->exec($n[3]);
+        }
     }
 }
 

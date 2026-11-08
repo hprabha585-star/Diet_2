@@ -151,6 +151,7 @@ CREATE TABLE IF NOT EXISTS `plans` (
   `brochure_pdf_base64` longtext DEFAULT NULL,
   `brochure_pdf_name` varchar(255) DEFAULT NULL,
   `is_trial` tinyint(1) DEFAULT 0,
+  `is_renewal` tinyint(1) DEFAULT 0,
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL,
   PRIMARY KEY (`id`),

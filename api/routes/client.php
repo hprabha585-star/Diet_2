@@ -390,6 +390,7 @@ route('POST', '/payments', function () {
     if (!truthy($tier) || !truthy($utr)) respond(400, ['error' => 'Plan and UTR are required']);
     $plan = find_one('plans', ['key' => $tier, 'active' => true]);
     if (!$plan) respond(404, ['error' => 'Plan not found']);
+    if (!empty($plan['isRenewal']) && !is_paying_client(me())) respond(403, ['error' => 'Renewal plans are only for existing clients. Please choose one of the main plans.']);
     $attrs = ['userId' => me()['id'], 'tier' => $plan['key'], 'planName' => $plan['name'], 'amountInr' => $plan['priceInr'], 'utr' => $utr];
     if (in_body('screenshotBase64') !== null) $attrs['screenshotBase64'] = in_body('screenshotBase64');
     respond(201, ['payment' => create('payments', $attrs)]);
@@ -402,7 +403,10 @@ route('GET', '/payment-status', function () {
 route('GET', '/plans', function () {
     $plans = find_all('plans', ['active' => true], [['order', 'ASC'], ['priceInr', 'ASC']]);
     if (me()['hadPaidPlan']) $plans = array_values(array_filter($plans, fn($p) => !$p['isTrial'] && $p['priceInr'] > 0));
-    return ['plans' => $plans];
+    // New / non-paying users: main plans only. Paying clients: main (upgrade) + renewal packs.
+    $paying = is_paying_client(me());
+    if (!$paying) $plans = array_values(array_filter($plans, fn($p) => empty($p['isRenewal'])));
+    return ['plans' => $plans, 'isPayingClient' => $paying];
 });
 
 route('GET', '/journal', function () {
