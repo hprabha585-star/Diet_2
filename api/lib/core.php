@@ -335,6 +335,41 @@ function in_body($k) { $b = body(); return array_key_exists($k, $b) ? $b[$k] : n
 function has_body($k) { return array_key_exists($k, body()); }
 function qparam($k) { return isset($_GET[$k]) ? $_GET[$k] : null; }
 
+/**
+ * Parses one clock value into hours in [0, 24): "09:30" (what <input type="time">
+ * sends) -> 9.5, "24:00" -> 0, or a plain number of hours (9.5). Returns null for
+ * anything else.
+ */
+function parse_clock_hour($v) {
+    if (is_string($v) && preg_match('/^\s*(\d{1,2}):(\d{2})\s*$/', $v, $m)) {
+        $h = (int)$m[1]; $mi = (int)$m[2];
+        if ($h > 24 || $mi > 59 || ($h === 24 && $mi > 0)) return null;
+        return round(($h % 24) + $mi / 60, 4);
+    }
+    if (is_int($v) || is_float($v) || (is_string($v) && is_numeric($v))) {
+        $n = (float)$v;
+        return ($n >= 0 && $n < 24) ? round($n, 4) : null;
+    }
+    return null;
+}
+
+/**
+ * Reads the start or end of an eating window from a request body. Prefers the
+ * new "startTime"/"endTime" ("HH:MM") fields and falls back to the older numeric
+ * "startHour"/"endHour". Returns null when the client did not send that field;
+ * sends a 400 when it did but the value is not a valid time.
+ */
+function window_hour($body, $which) {
+    $prefix = $which === 'start' ? 'start' : 'end';
+    foreach ([$prefix . 'Time', $prefix . 'Hour'] as $key) {
+        if (!array_key_exists($key, $body)) continue;
+        $h = parse_clock_hour($body[$key]);
+        if ($h === null) respond(400, ['error' => ucfirst($prefix) . ' time must be a valid time such as 09:00.']);
+        return $h;
+    }
+    return null;
+}
+
 function auth_header() {
     foreach (['HTTP_AUTHORIZATION', 'REDIRECT_HTTP_AUTHORIZATION'] as $k) if (!empty($_SERVER[$k])) return $_SERVER[$k];
     if (function_exists('getallheaders')) foreach (getallheaders() as $k => $v) if (strtolower($k) === 'authorization') return $v;

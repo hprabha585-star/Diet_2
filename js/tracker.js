@@ -31,7 +31,10 @@ function fmtHms(hours) {
   const s = Math.max(0, Math.round((hours || 0) * 3600));
   return `${String(Math.floor(s / 3600)).padStart(2, '0')}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 }
-const fmtClock = (d) => new Date(d).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+const fmtClock = (d) => {
+  const x = parseServerDate(d);
+  return isNaN(x) ? '—' : x.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+};
 const fmtDay = (d) => new Date(d + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 const toLocalInput = (d) => {
   const x = new Date(d);
@@ -268,25 +271,38 @@ function ringSvg(percent, centreHtml, klass = '') {
     </div>`;
 }
 
+/* Hours elapsed since a fast started, measured on this browser's clock.
+   Never below zero, and never NaN — a bad or missing start time reads 0. */
+function elapsedHoursOf(startAt) {
+  const ms = parseServerDate(startAt).getTime();
+  if (!isFinite(ms)) return 0;
+  return Math.max(0, (Date.now() - ms) / 3600000);
+}
+
 function renderFastHero(el) {
   if (!el) return;
   if (state.fast) {
     const f = state.fast;
-    const done = f.reachedTarget;
+    const target = Number(f.targetHours) > 0 ? Number(f.targetHours) : 0;
+    const elapsed = elapsedHoursOf(f.startAt);
+    const remaining = Math.max(0, target - elapsed);
+    const percent = target ? Math.min(100, Math.round((elapsed / target) * 100)) : 0;
+    const done = target > 0 && elapsed >= target;
     el.className = 'card fast-hero ' + (done ? 'is-done' : 'is-running');
+    // The live timer always starts at 00:00:00 and counts forward.
     el.innerHTML = `
       <div class="fast-hero-top">
         <span class="sched-pill">${esc(f.scheduleKey)}</span>
         <span class="stage-pill">${esc(f.stage.name)}</span>
       </div>
-      ${ringSvg(f.percent, `
+      ${ringSvg(percent, `
         <div class="state">${done ? 'Target reached' : 'Fasting'}</div>
-        <div class="time" id="live-countdown">${done ? fmtHm(f.elapsedHours) : fmtHms(f.remainingHours)}</div>
-        <div class="sub" id="live-percent">${f.percent}% complete</div>`)}
+        <div class="time" id="live-countdown">${fmtHms(elapsed)}</div>
+        <div class="sub" id="live-percent">${percent}% complete</div>`)}
       <div class="fast-times">
         <div><span>Started</span><b>${fmtClock(f.startAt)}</b></div>
         <div><span>Ends</span><b>${fmtClock(f.expectedEndAt)}</b></div>
-        <div><span>Elapsed</span><b id="live-elapsed">${fmtHm(f.elapsedHours)}</b></div>
+        <div><span>Remaining</span><b id="live-remaining">${fmtHm(remaining)}</b></div>
       </div>
       <div class="fast-actions">
         ${done ? `<button class="btn btn-primary" onclick="openEndFast()">Complete fast</button>` :
@@ -297,15 +313,13 @@ function renderFastHero(el) {
   } else if (state.eating) {
     const e = state.eating;
     el.className = 'card fast-hero is-eating';
+    // No timer during the eating window — only the designated hours, as text.
     el.innerHTML = `
       <div class="fast-hero-top"><span class="sched-pill eating">Eating window</span></div>
-      ${ringSvg(e.percent, `
-        <div class="state">Eating window</div>
-        <div class="time">${fmtHm(e.remainingHours)}</div>
-        <div class="sub">remaining</div>`, 'green')}
-      <div class="fast-times">
-        <div><span>Started</span><b>${fmtClock(e.startAt)}</b></div>
-        <div><span>Ends</span><b>${fmtClock(e.endsAt)}</b></div>
+      <div class="eating-static" style="text-align:center;padding:36px 8px;">
+        <div class="state" style="font-size:14px;opacity:.8;">Eating Time</div>
+        <div style="font-size:26px;font-weight:700;margin-top:8px;">${fmtClock(e.startAt)} - ${fmtClock(e.endsAt)}</div>
+        <p class="hint" style="margin-top:12px;">Your next fast starts when this window closes.</p>
       </div>
       <div class="fast-actions">
         <button class="btn btn-primary" onclick="openStartFast()">Start next fast</button>
@@ -472,24 +486,31 @@ async function cancelFast() {
 }
 
 /* ---- live ticking + in-app reminders ---- */
+// One tick: the fasting timer counts UP from 00:00:00 and is the only live
+// timer on this screen. Runs once straight away (so nothing flashes blank
+// or negative on load) and then every second.
+function tickFast() {
+  if (!state || !state.fast) return;
+  const f = state.fast;
+  const target = Number(f.targetHours) > 0 ? Number(f.targetHours) : 0;
+  const elapsed = elapsedHoursOf(f.startAt);
+  const remaining = Math.max(0, target - elapsed);
+  const percent = target ? Math.min(100, Math.round((elapsed / target) * 100)) : 0;
+  const cd = document.getElementById('live-countdown');
+  if (cd) cd.textContent = fmtHms(elapsed);
+  const pc = document.getElementById('live-percent');
+  if (pc) pc.textContent = `${percent}% complete`;
+  const rem = document.getElementById('live-remaining');
+  if (rem) rem.textContent = fmtHm(remaining);
+  checkReminders(elapsed, remaining);
+  // Re-pull once when the target is first crossed so the UI switches state.
+  if (target && elapsed >= target && !f.reachedTarget) { f.reachedTarget = true; refreshState().then(renderFastPage); }
+}
+
 function startTicking() {
   if (tickTimer) clearInterval(tickTimer);
-  tickTimer = setInterval(() => {
-    if (!state || !state.fast) return;
-    const f = state.fast;
-    const elapsed = (Date.now() - new Date(f.startAt)) / 3600000;
-    const remaining = Math.max(0, f.targetHours - elapsed);
-    const percent = Math.min(100, Math.round((elapsed / f.targetHours) * 100));
-    const cd = document.getElementById('live-countdown');
-    if (cd) cd.textContent = remaining > 0 ? fmtHms(remaining) : fmtHm(elapsed);
-    const pc = document.getElementById('live-percent');
-    if (pc) pc.textContent = `${percent}% complete`;
-    const el = document.getElementById('live-elapsed');
-    if (el) el.textContent = fmtHm(elapsed);
-    checkReminders(elapsed, remaining);
-    // Re-pull once when the target is first crossed so the UI switches state.
-    if (remaining === 0 && !f.reachedTarget) { f.reachedTarget = true; refreshState().then(renderFastPage); }
-  }, 1000);
+  tickFast();
+  tickTimer = setInterval(tickFast, 1000);
 
   if (reminderTimer) clearInterval(reminderTimer);
   reminderTimer = setInterval(checkWaterReminder, 60000);

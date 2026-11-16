@@ -367,8 +367,8 @@ function editProtocolDay(day) {
     <label class="check-line"><input type="checkbox" id="pd-fullfast-${day}" ${d.isFullDayFast ? 'checked' : ''}
       onchange="document.getElementById('pd-window-${day}').style.display = this.checked ? 'none' : 'flex';"> Full-day fast (no eating window)</label>
     <div class="custom-row" id="pd-window-${day}" style="display:${d.isFullDayFast ? 'none' : 'flex'};">
-      <div class="field"><label>Eating window start (24h)</label><input type="number" id="pd-start-${day}" step="0.5" value="${d.startHour}"></div>
-      <div class="field"><label>Eating window end (24h)</label><input type="number" id="pd-end-${day}" step="0.5" value="${d.endHour}"></div>
+      <div class="field"><label>Eating window start</label><input type="time" id="pd-start-${day}" value="${hourToHHMM(d.startHour)}"></div>
+      <div class="field"><label>Eating window end</label><input type="time" id="pd-end-${day}" value="${hourToHHMM(d.endHour)}"></div>
     </div>
     <div class="field"><label>Water target (ml)</label><input type="number" id="pd-water-${day}" value="${d.waterTargetMl}"></div>
     <div class="field"><label>Focus / notes for the day</label><textarea id="pd-focus-${day}" rows="3">${esc(d.focus || '')}</textarea></div>
@@ -393,8 +393,8 @@ async function saveProtocolDay(day) {
       focus: document.getElementById(`pd-focus-${day}`).value
     };
     if (!isFullDayFast) {
-      body.startHour = document.getElementById(`pd-start-${day}`).value;
-      body.endHour = document.getElementById(`pd-end-${day}`).value;
+      body.startTime = document.getElementById(`pd-start-${day}`).value;
+      body.endTime = document.getElementById(`pd-end-${day}`).value;
     }
     const res = await apiRequest(`/admin/protocol-defaults/${day}`, { method: 'PATCH', body });
     const idx = protocol55Cache.days.findIndex(x => x.day === day);
@@ -539,8 +539,8 @@ async function loadAssignedDay() {
   if (data.assigned && data.regimen) {
     const r = data.regimen;
     document.getElementById('assign-fullfast').checked = !!r.isFullDayFast;
-    document.getElementById('assign-start').value = r.startHour;
-    document.getElementById('assign-end').value = r.endHour;
+    document.getElementById('assign-start').value = hourToHHMM(r.startHour);
+    document.getElementById('assign-end').value = hourToHHMM(r.endHour);
     document.getElementById('assign-focus').value = r.focus || '';
     document.getElementById('assign-water').value = r.waterTargetMl || 3000;
     (r.meals || []).forEach(m => addMealRow(m.type, m.name, m.calories ?? ''));
@@ -619,8 +619,8 @@ function applyPreset() {
 
 function applyPresetObject(d) {
   document.getElementById('assign-fullfast').checked = !!d.isFullDayFast;
-  document.getElementById('assign-start').value = d.startHour ?? 9;
-  document.getElementById('assign-end').value = d.endHour ?? 17;
+  document.getElementById('assign-start').value = hourToHHMM(d.startHour ?? 9);
+  document.getElementById('assign-end').value = hourToHHMM(d.endHour ?? 17);
   document.getElementById('assign-focus').value = d.focus || '';
   document.getElementById('assign-water').value = d.waterTargetMl || 3000;
   toggleAssignFullFast();
@@ -692,8 +692,8 @@ async function submitAssignPlan(applyAll) {
     const body = {
       day, days,
       isFullDayFast,
-      startHour: parseFloat(document.getElementById('assign-start').value),
-      endHour: parseFloat(document.getElementById('assign-end').value),
+      startTime: document.getElementById('assign-start').value,
+      endTime: document.getElementById('assign-end').value,
       protocolType: isFullDayFast ? 'fast_24' : 'eating_window',
       focus: document.getElementById('assign-focus').value,
       waterTargetMl: parseInt(document.getElementById('assign-water').value, 10) || 3000,
@@ -751,8 +751,8 @@ async function saveAsDefaultDay() {
       method: 'PUT',
       body: {
         isFullDayFast,
-        startHour: parseFloat(document.getElementById('assign-start').value),
-        endHour: parseFloat(document.getElementById('assign-end').value),
+        startTime: document.getElementById('assign-start').value,
+        endTime: document.getElementById('assign-end').value,
         focus: document.getElementById('assign-focus').value,
         waterTargetMl: parseInt(document.getElementById('assign-water').value, 10) || 3000,
         meals, milestones
@@ -770,8 +770,8 @@ async function loadDefaultDayIntoForm() {
     document.getElementById('assign-meals-rows').innerHTML = '';
     document.getElementById('assign-milestones-rows').innerHTML = '';
     document.getElementById('assign-fullfast').checked = !!t.isFullDayFast;
-    document.getElementById('assign-start').value = t.startHour ?? 9;
-    document.getElementById('assign-end').value = t.endHour ?? 17;
+    document.getElementById('assign-start').value = hourToHHMM(t.startHour ?? 9);
+    document.getElementById('assign-end').value = hourToHHMM(t.endHour ?? 17);
     document.getElementById('assign-focus').value = t.focus || '';
     document.getElementById('assign-water').value = t.waterTargetMl || 3000;
     (t.meals || []).forEach(m => addMealRow(m.type, m.name, m.calories ?? ''));
@@ -809,10 +809,10 @@ async function loadProgramGuideEditor(clientId) {
               onchange="toggleGuideFullFast(${clientId}, ${d.day}, this.checked)"> Full-day fast (24h, no eating window)
           </label>
           <div class="guide-window-row" id="guide-window-${d.day}" style="display:${d.isFullDayFast ? 'none' : 'flex'};gap:8px;margin-bottom:8px;">
-            <div class="field" style="flex:1;margin:0;"><label>Eating window start (24h)</label>
-              <input type="number" step="0.5" id="guide-start-${d.day}" value="${d.startHour}" onblur="saveDayWindow(${clientId}, ${d.day})"></div>
-            <div class="field" style="flex:1;margin:0;"><label>Eating window end (24h)</label>
-              <input type="number" step="0.5" id="guide-end-${d.day}" value="${d.endHour}" onblur="saveDayWindow(${clientId}, ${d.day})"></div>
+            <div class="field" style="flex:1;margin:0;"><label>Eating window start</label>
+              <input type="time" id="guide-start-${d.day}" value="${hourToHHMM(d.startHour)}" onchange="saveDayWindow(${clientId}, ${d.day})"></div>
+            <div class="field" style="flex:1;margin:0;"><label>Eating window end</label>
+              <input type="time" id="guide-end-${d.day}" value="${hourToHHMM(d.endHour)}" onchange="saveDayWindow(${clientId}, ${d.day})"></div>
           </div>
           <textarea placeholder="What's this day about?"
             onblur="saveDayFocus(${clientId}, ${d.day}, this.value)">${esc(d.focus || '')}</textarea>
@@ -858,12 +858,12 @@ async function saveDayWindow(clientId, day) {
   const startEl = document.getElementById(`guide-start-${day}`);
   const endEl = document.getElementById(`guide-end-${day}`);
   const isFullDayFast = fullFastEl ? !!fullFastEl.checked : false;
-  const startHour = startEl ? Number(startEl.value) : undefined;
-  const endHour = endEl ? Number(endEl.value) : undefined;
+  const startTime = startEl ? startEl.value : undefined;
+  const endTime = endEl ? endEl.value : undefined;
   try {
     await apiRequest(`/admin/clients/${clientId}/regimen/${day}/focus`, {
       method: 'PATCH',
-      body: { isFullDayFast, startHour, endHour }
+      body: { isFullDayFast, startTime, endTime }
     });
   } catch (err) { alert(`Could not save day ${day} window: ${err.message}`); }
 }

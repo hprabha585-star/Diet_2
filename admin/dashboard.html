@@ -238,8 +238,8 @@
       <label class="hint"><input type="checkbox" id="assign-fullfast" onchange="toggleAssignFullFast()"> Full-day fast (no eating window)</label>
     </div>
     <div id="assign-window-fields" style="display:flex;gap:10px;margin-top:10px;">
-      <div class="field" style="flex:1;"><label>Eating window start (24h)</label><input type="number" id="assign-start" step="0.5" value="9"></div>
-      <div class="field" style="flex:1;"><label>Eating window end (24h)</label><input type="number" id="assign-end" step="0.5" value="17"></div>
+      <div class="field" style="flex:1;"><label>Eating window start</label><input type="time" id="assign-start" value="09:00"></div>
+      <div class="field" style="flex:1;"><label>Eating window end</label><input type="time" id="assign-end" value="17:00"></div>
     </div>
     <div class="field"><label>Focus / notes for the day</label><input type="text" id="assign-focus"></div>
     <div class="field" style="max-width:200px;"><label>Water target (ml)</label><input type="number" id="assign-water" value="3000"></div>

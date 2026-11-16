@@ -218,6 +218,33 @@ function fmtCountdown(totalSeconds) {
   return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
 }
 
+/* Hours (9.5) <-> "09:30" for <input type="time">. The server stores
+   window edges as hours; the time picker only ever shows HH:MM.        */
+function hourToHHMM(h) {
+  if (h === null || h === undefined || h === '' || isNaN(Number(h))) return '';
+  const t = ((Number(h) % 24) + 24) % 24;
+  let hh = Math.floor(t), mm = Math.round((t - hh) * 60);
+  if (mm === 60) { mm = 0; hh = (hh + 1) % 24; }
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+}
+function hhmmToHour(v) {
+  const m = /^\s*(\d{1,2}):(\d{2})\s*$/.exec(v || '');
+  if (!m) return null;
+  const h = Number(m[1]), mi = Number(m[2]);
+  if (h > 23 || mi > 59) return null;
+  return h + mi / 60;
+}
+
+/* Timestamps from the server are UTC. A bare "YYYY-MM-DD HH:MM:SS" has no
+   zone, and browsers read that as LOCAL time, which skews every elapsed
+   count by the user's UTC offset. Treat zone-less values as UTC.        */
+function parseServerDate(v) {
+  if (v instanceof Date) return v;
+  const s = String(v || '');
+  const hasZone = /([zZ]|[+-]\d{2}:?\d{2})$/.test(s);
+  return new Date(hasZone ? s : s.replace(' ', 'T') + 'Z');
+}
+
 
 /* ------------------------------------------------------------------ */
 /* Public contact links (phone, WhatsApp, email, Instagram, YouTube).   */
