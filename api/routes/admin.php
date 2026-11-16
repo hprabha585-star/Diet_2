@@ -150,9 +150,10 @@ route('PATCH', '/protocol-defaults/:day', function ($p) {
         $ch += ['startHour' => 9, 'endHour' => 9, 'eatingHours' => 0, 'fastingHours' => 24];
         $ch['startHour'] = 9; $ch['endHour'] = 9; $ch['eatingHours'] = 0; $ch['fastingHours'] = 24;
     } else {
-        $start = has_body('startHour') ? js_float(in_body('startHour')) : $row['startHour'];
-        $end = has_body('endHour') ? js_float(in_body('endHour')) : $row['endHour'];
-        $eating = round1($end - $start);
+        $start = window_hour(body(), 'start') ?? (float)$row['startHour'];
+        $end = window_hour(body(), 'end') ?? (float)$row['endHour'];
+        // A window that runs past midnight (e.g. 20:00 -> 04:00) is 8h, not -16h.
+        $eating = round1($end >= $start ? $end - $start : 24 - $start + $end);
         $ch += ['startHour' => $start, 'endHour' => $end];
         $ch['eatingHours'] = $eating; $ch['fastingHours'] = round1(24 - $eating);
     }
@@ -191,7 +192,7 @@ route('PUT', '/default-day-template', function () {
     $s = settings_get_or_create();
     $meals = in_body('meals'); $ms = in_body('milestones');
     $tpl = [
-        'startHour' => in_body('startHour'), 'endHour' => in_body('endHour'),
+        'startHour' => window_hour(body(), 'start'), 'endHour' => window_hour(body(), 'end'),
         'isFullDayFast' => truthy(in_body('isFullDayFast')), 'focus' => truthy(in_body('focus')) ? in_body('focus') : '',
         'waterTargetMl' => truthy(in_body('waterTargetMl')) ? in_body('waterTargetMl') : 3000,
         'meals' => is_array($meals) ? $meals : [], 'milestones' => is_array($ms) ? $ms : [],
@@ -239,8 +240,10 @@ route('PATCH', '/clients/:id/regimen/:day/focus', function ($p) {
     if (is_string(in_body('focus'))) $ch['focus'] = in_body('focus');
     if (is_string(in_body('phase'))) $ch['phase'] = in_body('phase');
     if (is_bool(in_body('isFullDayFast'))) $ch['isFullDayFast'] = in_body('isFullDayFast');
-    if (is_int(in_body('startHour')) || is_float(in_body('startHour'))) $ch['startHour'] = in_body('startHour');
-    if (is_int(in_body('endHour')) || is_float(in_body('endHour'))) $ch['endHour'] = in_body('endHour');
+    $start = window_hour(body(), 'start');
+    $end = window_hour(body(), 'end');
+    if ($start !== null) $ch['startHour'] = $start;
+    if ($end !== null) $ch['endHour'] = $end;
     $r = save('regimens', $r, $ch);
     return ['day' => $r['day'], 'focus' => $r['focus'], 'phase' => $r['phase'], 'startHour' => $r['startHour'], 'endHour' => $r['endHour'], 'isFullDayFast' => $r['isFullDayFast']];
 }, ['err' => 'Could not save day info']);
@@ -303,9 +306,11 @@ route('POST', '/clients/:id/program-guide/seed-defaults', function ($p) {
 function write_regimen($userId, $b) {
     [$r] = regimen_find_or_create($userId, $b['day'], ['startHour' => 9, 'endHour' => 17]);
     $full = truthy($b['isFullDayFast'] ?? null);
+    $start = window_hour($b, 'start');
+    $end = window_hour($b, 'end');
     $ch = [
-        'startHour' => $full ? ($b['startHour'] ?? $r['startHour']) : ($b['startHour'] ?? null),
-        'endHour' => $full ? ($b['endHour'] ?? $r['endHour']) : ($b['endHour'] ?? null),
+        'startHour' => $full ? ($start ?? $r['startHour']) : $start,
+        'endHour' => $full ? ($end ?? $r['endHour']) : $end,
         'isFullDayFast' => $full,
         'protocolType' => truthy($b['protocolType'] ?? null) ? $b['protocolType'] : 'eating_window',
         'phase' => truthy($b['phase'] ?? null) ? $b['phase'] : '',
@@ -396,7 +401,9 @@ route('POST', '/payments/:id/approve', function ($p) {
     if ($client['referredBy']) {
         if (count_rows('payments', ['userId' => $client['id'], 'status' => 'approved']) === 1) {
             $ref = find_pk('users', $client['referredBy']);
-            if ($ref) save('users', $ref, ['walletBalanceInr' => $ref['walletBalanceInr'] + 500]);
+            // 10% referral commission on the referred client's first approved payment.
+            $commission = (int)floor($payment['amountInr'] * 0.10);
+            if ($ref) save('users', $ref, ['walletBalanceInr' => $ref['walletBalanceInr'] + $commission]);
         }
     }
     return ['payment' => $payment, 'client' => safe_user($client)];

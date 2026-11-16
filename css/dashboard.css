@@ -863,3 +863,25 @@
   .modal select, .field select { max-width: 100%; }
   .plan-cards { grid-template-columns: 1fr; }
 }
+
+/* Referral tab — commission banner + per-plan earnings math (Growth &    */
+/* Distribution). */
+.referral-banner {
+  margin-top: 20px; padding: 20px; border-radius: 14px;
+  background: linear-gradient(135deg, rgba(37,211,102,0.10), rgba(255,255,255,0));
+  border: 1px solid rgba(37,211,102,0.35);
+}
+.referral-banner-heading { font-size: 19px; font-weight: 800; color: var(--ink); line-height: 1.3; }
+.referral-banner-sub { font-size: 13px; color: #6B6F63; margin-top: 6px; }
+.referral-math { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+.referral-math-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 14px; background: var(--paper-raised); border: 1px solid var(--line);
+  border-radius: 10px; font-size: 14px; flex-wrap: wrap;
+}
+.referral-math-plan { font-weight: 600; }
+.referral-math-arrow { color: #6B6F63; font-size: 13px; }
+.referral-math-amt { font-weight: 800; color: #1a8a4a; font-size: 16px; }
+@media (max-width: 520px) {
+  .referral-math-row { flex-direction: column; align-items: flex-start; gap: 2px; }
+}

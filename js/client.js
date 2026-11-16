@@ -201,7 +201,10 @@ async function loadAchievements() {
         <div style="font-weight:600;margin-top:6px;">${esc(a.title)}</div>
         ${a.description ? `<p class="hint" style="margin-top:4px;">${esc(a.description)}</p>` : ''}
         <div class="hint" style="margin-top:6px;">${new Date(a.earnedAt).toLocaleDateString()}</div>
-        <button class="btn-ghost btn-sm" style="margin-top:6px;" onclick='shareAchievement(${JSON.stringify(a.title).replace(/'/g, "&#39;")}, ${JSON.stringify(a.description || '').replace(/'/g, "&#39;")})'>Share this</button>
+        <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn-ghost btn-sm" onclick='shareAchievement(${JSON.stringify(a.title).replace(/'/g, "&#39;")}, ${JSON.stringify(a.description || '').replace(/'/g, "&#39;")})'>Share this</button>
+          ${(a.hours || 0) >= 24 ? `<button class="btn btn-outline btn-sm" onclick='downloadFastingCertificate(${JSON.stringify(a.title).replace(/'/g, "&#39;")}, ${Number(a.hours) || 24}, ${JSON.stringify(a.earnedAt).replace(/'/g, "&#39;")})'>🎓 Certificate</button>` : ''}
+        </div>
       </div>`).join('')}</div>`
       : '<p class="hint">No achievements yet — complete a 24-hour+ fast to earn your first badge.</p>';
   } catch (err) {
@@ -214,6 +217,106 @@ async function loadAchievements() {
 async function shareAchievement(title, description) {
   const text = `🏆 ${title}${description ? ` — ${description}` : ''} #FastCoach`;
   await shareTextOrCopy(text, title);
+}
+
+/* ------------------------------------------------------------------ */
+/* Fasting completion certificate                                       */
+/* ------------------------------------------------------------------ */
+
+// Pulls "@handle" out of either a bare handle or a full instagram.com URL,
+// for a clean, printable footer line instead of a raw URL.
+function instagramHandleDisplay(v) {
+  if (!v) return '';
+  const s = String(v).trim();
+  const m = /instagram\.com\/([^/?#]+)/i.exec(s);
+  const handle = m ? m[1] : s.replace(/^@/, '');
+  return handle ? `@${handle}` : '';
+}
+
+// The certificate's one "template configuration" — everything that fills
+// the footer branding, read live from the coach's own Site settings so an
+// admin can change their Instagram handle or phone number without this
+// template ever needing to be touched again.
+function certificateTemplateConfig() {
+  const s = (typeof SITE_SETTINGS !== 'undefined' && SITE_SETTINGS) ? SITE_SETTINGS : {};
+  return {
+    siteName: s.siteName || 'FastCoach',
+    coachName: s.coachName || '',
+    instagramHandle: instagramHandleDisplay(s.instagramUrl),
+    phone: s.phone || ''
+  };
+}
+
+function buildCertificateNode(title, hours, earnedAtIso) {
+  const cfg = certificateTemplateConfig();
+  const clientName = (currentUser && currentUser.name) || 'Valued Client';
+  const dateStr = new Date(earnedAtIso || Date.now()).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  const hoursText = Math.round(hours);
+
+  // Footer branding line — Instagram handle and contact number, both
+  // pulled dynamically from site settings rather than hard-coded, and
+  // either piece is simply omitted if the coach hasn't set it.
+  const footerParts = [];
+  if (cfg.instagramHandle) footerParts.push(`Instagram: ${cfg.instagramHandle}`);
+  if (cfg.phone) footerParts.push(`Contact: ${cfg.phone}`);
+  const footerLine = footerParts.join('   •   ');
+
+  const node = document.createElement('div');
+  node.style.cssText = 'width:1600px;height:1131px;box-sizing:border-box;'
+    + 'background:#fffdf7;font-family:Georgia,\'Times New Roman\',serif;color:#1c1c1c;'
+    + 'display:flex;flex-direction:column;align-items:center;justify-content:space-between;'
+    + 'padding:70px;border:14px solid #c9622a;position:relative;';
+  node.innerHTML = `
+    <div style="position:absolute;inset:28px;border:2px solid #c9622a;pointer-events:none;"></div>
+    <div style="text-align:center;margin-top:20px;">
+      <div style="font-size:22px;letter-spacing:6px;color:#9a9a9a;">${esc(cfg.siteName).toUpperCase()}</div>
+      <div style="font-size:56px;font-weight:700;color:#1c1c1c;margin-top:18px;letter-spacing:2px;">CERTIFICATE OF COMPLETION</div>
+      <div style="font-size:22px;color:#6B6F63;margin-top:14px;">Water Fasting Achievement</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="font-size:22px;color:#6B6F63;">This certifies that</div>
+      <div style="font-size:52px;font-weight:700;color:#c9622a;margin-top:12px;border-bottom:2px solid #c9622a;display:inline-block;padding-bottom:8px;">${esc(clientName)}</div>
+      <div style="font-size:26px;margin-top:28px;max-width:1100px;line-height:1.5;">
+        has successfully completed a <strong>${hoursText}-hour water fast</strong><br>
+        earning the achievement "<em>${esc(title)}</em>" on ${dateStr}.
+      </div>
+    </div>
+    <div style="width:100%;text-align:center;">
+      <div style="font-size:20px;color:#9a9a9a;">${esc(cfg.coachName || cfg.siteName)}${cfg.coachName ? ' · ' + esc(cfg.siteName) : ''}</div>
+      ${footerLine ? `<div style="font-size:20px;color:#6B6F63;margin-top:10px;letter-spacing:0.5px;">${esc(footerLine)}</div>` : ''}
+    </div>`;
+  return node;
+}
+
+async function downloadFastingCertificate(title, hours, earnedAtIso) {
+  if (typeof html2canvas === 'undefined') {
+    alert("Couldn't load the image tool — check your connection and try again.");
+    return;
+  }
+  const stage = document.createElement('div');
+  stage.style.cssText = 'position:fixed;left:-99999px;top:0;z-index:-1;';
+  const node = buildCertificateNode(title, hours, earnedAtIso);
+  stage.appendChild(node);
+  document.body.appendChild(stage);
+  try {
+    const canvas = await html2canvas(node, { scale: 1.2, backgroundColor: '#fffdf7', useCORS: true });
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.95));
+    if (!blob) throw new Error('Could not generate the certificate.');
+    const file = new File([blob], 'fastcoach-certificate.png', { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'My Fasting Certificate', text: `🎓 ${title} — ${Math.round(hours)}h water fast completed!` });
+    } else {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'fastcoach-certificate.png';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    }
+  } catch (err) {
+    if (!err || err.name !== 'AbortError') alert(err && err.message ? err.message : 'Could not generate the certificate.');
+  } finally {
+    stage.remove();
+  }
 }
 
 // "Share everything" — bundles BMI, current weight, and the client's
@@ -367,6 +470,7 @@ async function loadDashboard() {
   }
 
   if (timerInterval) clearInterval(timerInterval);
+  tick();
   timerInterval = setInterval(tick, 1000);
 }
 
@@ -624,6 +728,9 @@ function tick() {
   const regimen = dashboardData.regimen;
   const { startHour, endHour, isFullDayFast } = regimen;
 
+  const eatStartText = isFullDayFast ? '—' : fmtHour12(startHour);
+  const eatEndText = isFullDayFast ? '—' : fmtHour12(endHour);
+
   // Exact clock times, worked out once per tick (cheap) rather than
   // re-deriving them on every dashboard reload.
   if (isFullDayFast) {
@@ -634,8 +741,8 @@ function tick() {
   } else {
     document.getElementById('fast-starts').textContent = fmtHour12(endHour);   // eating closes -> fasting starts
     document.getElementById('fast-ends').textContent = fmtHour12(startHour);   // fasting ends -> eating opens
-    document.getElementById('eat-starts').textContent = fmtHour12(startHour);
-    document.getElementById('eat-ends').textContent = fmtHour12(endHour);
+    document.getElementById('eat-starts').textContent = eatStartText;
+    document.getElementById('eat-ends').textContent = eatEndText;
   }
 
   const fs = computeFastingState(regimen, dashboardData.fastingPause.active, dashboardData.fastingPause.reason);
@@ -646,10 +753,15 @@ function tick() {
   const fastLabelEl = document.getElementById('fast-timer-label');
   const eatLabelEl = document.getElementById('eat-timer-label');
 
+  // The eating panel never runs a live timer — just a static line with the
+  // designated hours for the window (or a full-day-fast note).
+  eatTimerEl.textContent = isFullDayFast ? 'No eating window today' : `Eating Time: ${eatStartText} - ${eatEndText}`;
+  eatLabelEl.textContent = '';
+
   if (fs.state === 'paused') {
     fastStateEl.textContent = 'Paused'; eatStateEl.textContent = 'Paused';
-    fastTimerEl.textContent = '00:00:00'; eatTimerEl.textContent = '00:00:00';
-    fastLabelEl.textContent = ''; eatLabelEl.textContent = '';
+    fastTimerEl.textContent = '00:00:00';
+    fastLabelEl.textContent = '';
     return;
   }
 
@@ -659,20 +771,18 @@ function tick() {
     : (startHour <= endHour ? endHour - startHour : 24 - startHour + endHour);
   const fastingHours = 24 - eatingHours;
 
+  // The fasting panel is the only live timer on this page, and it always
+  // counts UP from 00:00:00 — never blank, negative or NaN.
+  const secondsRemaining = Math.max(0, Number(fs.secondsRemaining) || 0);
   if (fs.state === 'fasting') {
-    const elapsed = Math.max(0, fastingHours * 3600 - fs.secondsRemaining);
+    const elapsed = Math.max(0, fastingHours * 3600 - secondsRemaining);
     fastStateEl.textContent = 'Active now'; eatStateEl.textContent = 'Opens soon';
     fastTimerEl.textContent = fmtCountdown(elapsed);      // counts UP
     fastLabelEl.textContent = 'elapsed';
-    eatTimerEl.textContent = fmtCountdown(fs.secondsRemaining); // counts down to start
-    eatLabelEl.textContent = 'until it starts';
   } else {
-    const elapsed = Math.max(0, eatingHours * 3600 - fs.secondsRemaining);
     fastStateEl.textContent = 'Starts soon'; eatStateEl.textContent = 'Active now';
-    eatTimerEl.textContent = fmtCountdown(elapsed);        // counts UP
-    eatLabelEl.textContent = 'elapsed';
-    fastTimerEl.textContent = fmtCountdown(fs.secondsRemaining); // counts down to start
-    fastLabelEl.textContent = 'until it starts';
+    fastTimerEl.textContent = fmtCountdown(0);            // idle while eating — no negative flash
+    fastLabelEl.textContent = 'starts after eating window';
   }
 }
 
@@ -726,6 +836,145 @@ function toggleWeightListRange() {
   renderWeightList();
 }
 
+/* ------------------------------------------------------------------ */
+/* Weekly progress — celebratory banner + shareable image card          */
+/* ------------------------------------------------------------------ */
+
+// Compares the latest weigh-in to the one ~7 days before it. If fewer than
+// 7 days of logs exist yet, falls back to the earliest entry on file so a
+// new client still sees *some* progress number instead of nothing.
+function computeWeeklyLoss() {
+  if (!weightLogsWithDelta.length) return null;
+  const oldestFirst = weightLogsWithDelta.slice().reverse();
+  const latest = oldestFirst[oldestFirst.length - 1];
+  if (oldestFirst.length < 2) return { latest, ref: latest, lossKg: 0, fullWeek: false, onlyOneEntry: true };
+  const weekAgo = new Date(new Date(latest.date).getTime() - 7 * 24 * 3600 * 1000);
+  let ref = null;
+  for (const w of oldestFirst) {
+    if (new Date(w.date) <= weekAgo) ref = w; else break;
+  }
+  const fullWeek = !!ref;
+  if (!ref) ref = oldestFirst[0];
+  const lossKg = Math.round((ref.weightKg - latest.weightKg) * 10) / 10;
+  return { latest, ref, lossKg, fullWeek, onlyOneEntry: false };
+}
+
+function renderWeeklyProgressCard() {
+  const card = document.getElementById('weekly-progress-card');
+  const headline = document.getElementById('weekly-progress-headline');
+  const sub = document.getElementById('weekly-progress-sub');
+  const shareBtn = document.getElementById('weekly-share-btn');
+  if (!card) return;
+  const w = computeWeeklyLoss();
+  if (!w || w.onlyOneEntry) {
+    card.style.display = 'none';
+    return;
+  }
+  card.style.display = 'block';
+  const abs = Math.abs(w.lossKg);
+  const period = w.fullWeek ? 'this week' : 'so far';
+  if (w.lossKg > 0) {
+    headline.textContent = `${abs} kg${abs === 1 ? '' : 's'} lost ${period}! 💪`;
+    sub.textContent = `From ${w.ref.weightKg} kg to ${w.latest.weightKg} kg. Keep it up!`;
+  } else if (w.lossKg === 0) {
+    headline.textContent = `Holding steady at ${w.latest.weightKg} kg 👍`;
+    sub.textContent = 'No change this week — consistency is progress too.';
+  } else {
+    headline.textContent = `${w.latest.weightKg} kg logged`;
+    sub.textContent = `Up ${abs} kg ${period} — let's refocus together.`;
+  }
+  if (shareBtn) shareBtn.disabled = false;
+}
+
+// Builds the off-screen DOM node that becomes the shared image. Kept as
+// plain inline styles (no CSS variables) because html2canvas rasterizes
+// the computed style, and inherited custom-property colors are the most
+// common source of a card that renders blank or black.
+function buildWeeklyShareCardNode(w) {
+  const site = (typeof SITE_SETTINGS !== 'undefined' && SITE_SETTINGS) ? SITE_SETTINGS : {};
+  const siteName = site.siteName || 'FastCoach';
+  const abs = Math.abs(w.lossKg);
+  const period = w.fullWeek ? 'THIS WEEK' : 'SO FAR';
+  let big, color;
+  if (w.lossKg > 0) { big = `−${abs} kg`; color = '#1a8a4a'; }
+  else if (w.lossKg === 0) { big = `${w.latest.weightKg} kg`; color = '#2d6cdf'; }
+  else { big = `+${abs} kg`; color = '#c9622a'; }
+
+  const node = document.createElement('div');
+  node.style.cssText = 'width:1080px;height:1350px;box-sizing:border-box;'
+    + 'background:linear-gradient(160deg,#fff7ec 0%,#ffffff 55%,#eafaf0 100%);'
+    + 'font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;'
+    + 'display:flex;flex-direction:column;align-items:center;justify-content:center;'
+    + 'padding:80px;text-align:center;color:#1c1c1c;';
+  node.innerHTML = `
+    <div style="font-size:40px;font-weight:800;letter-spacing:1px;color:#c9622a;">${esc(siteName).toUpperCase()}</div>
+    <div style="font-size:26px;font-weight:600;color:#6B6F63;margin-top:10px;letter-spacing:3px;">${period} PROGRESS</div>
+    <div style="font-size:160px;font-weight:900;color:${color};margin-top:50px;line-height:1;">${big}</div>
+    <div style="font-size:36px;font-weight:700;margin-top:30px;">
+      ${w.lossKg > 0 ? `${abs} kg${abs === 1 ? '' : 's'} lost ${w.fullWeek ? 'this week' : 'so far'}! 💪` : w.lossKg === 0 ? 'Holding steady 👍' : "Refocusing for next week"}
+    </div>
+    <div style="font-size:28px;color:#6B6F63;margin-top:40px;">${w.ref.weightKg} kg → ${w.latest.weightKg} kg</div>
+    <div style="margin-top:90px;font-size:24px;color:#9a9a9a;">Coached fasting with ${esc(siteName)}</div>`;
+  return node;
+}
+
+// Primary path: render the card to a PNG and hand it to the OS share sheet
+// via the Web Share API (level 2, file sharing) — this is what actually
+// puts WhatsApp, Instagram, Facebook Stories *and* individual chats in
+// one picker, because those apps register as share targets for images at
+// the OS level; there is no web-only way to deep-link an image into any
+// of them directly. Falls back to downloading the PNG (with a WhatsApp
+// text-link alongside) when the browser can't share files.
+async function shareWeeklyProgress() {
+  const statusEl = document.getElementById('weekly-share-status');
+  const btn = document.getElementById('weekly-share-btn');
+  const w = computeWeeklyLoss();
+  if (!w) return;
+  if (typeof html2canvas === 'undefined') {
+    statusEl.textContent = "Couldn't load the image tool — check your connection and try again.";
+    return;
+  }
+  btn.disabled = true;
+  statusEl.textContent = 'Preparing image…';
+  const stage = document.createElement('div');
+  stage.style.cssText = 'position:fixed;left:-99999px;top:0;z-index:-1;';
+  const card = buildWeeklyShareCardNode(w);
+  stage.appendChild(card);
+  document.body.appendChild(stage);
+  try {
+    const canvas = await html2canvas(card, { scale: 1, backgroundColor: '#ffffff', useCORS: true });
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.95));
+    if (!blob) throw new Error('Could not generate the image.');
+    const file = new File([blob], 'fastcoach-progress.png', { type: 'image/png' });
+    const site = (typeof SITE_SETTINGS !== 'undefined' && SITE_SETTINGS) ? SITE_SETTINGS : {};
+    const shareText = w.lossKg > 0
+      ? `${Math.abs(w.lossKg)} kg lost this week with ${site.siteName || 'FastCoach'}! 💪`
+      : 'My fasting progress with FastCoach.';
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'My FastCoach progress', text: shareText });
+      statusEl.textContent = 'Shared.';
+    } else {
+      // No OS share sheet for files (most desktop browsers). Download the
+      // image so it can be attached by hand, and open WhatsApp with the
+      // caption pre-filled as the next best thing.
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'fastcoach-progress.png';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank');
+      statusEl.textContent = 'Image downloaded — attach it to the WhatsApp chat that just opened.';
+    }
+  } catch (err) {
+    if (err && err.name !== 'AbortError') statusEl.textContent = err.message || 'Could not share the image.';
+    else statusEl.textContent = '';
+  } finally {
+    stage.remove();
+    btn.disabled = false;
+  }
+}
+
 async function loadHistoryPage(opts = {}) {
   try {
     const data = await apiRequest('/client/history');
@@ -740,6 +989,7 @@ async function loadHistoryPage(opts = {}) {
     }));
     weightLogsWithDelta = withDelta.slice().reverse(); // newest first
     renderWeightList();
+    renderWeeklyProgressCard();
 
     // Pre-fill the calculator with whatever we already know, so returning
     // to this page doesn't make the person retype everything.
@@ -1039,12 +1289,39 @@ async function loadReferral() {
     // page reads ?ref=... and pre-fills it, so whoever clicks doesn't
     // have to type the code in by hand.
     const link = `${location.origin}/index.html?ref=${encodeURIComponent(data.referralCode)}`;
+    const rate = data.commissionRate || 10;
+    const plans = (data.plans && data.plans.length) ? data.plans : [
+      { name: 'Example plan', priceInr: 6999, commissionInr: 699 },
+      { name: 'Example plan', priceInr: 10000, commissionInr: 1000 }
+    ];
+    const mathRows = plans.map(p => `
+      <div class="referral-math-row">
+        <span class="referral-math-plan">${esc(p.name)} <span class="muted">(₹${p.priceInr})</span></span>
+        <span class="referral-math-arrow">→ you earn</span>
+        <span class="referral-math-amt">₹${p.commissionInr}</span>
+      </div>`).join('');
+
+    const shareText = `💰 I earn ${rate}% commission on FastCoach just by sharing my link! Join using my link and start your fasting journey:\n${link}`;
+    const waShareUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+
     document.getElementById('referral-card').innerHTML = `
       <h3>Your code: ${esc(data.referralCode)}</h3>
       <div class="stat-grid two" style="margin-top:16px;">
         <div class="card stat-card"><div class="val">₹${data.walletBalanceInr}</div><div class="lbl">Wallet balance</div></div>
         <div class="card stat-card"><div class="val">${data.referredCount}</div><div class="lbl">People referred</div></div>
       </div>
+
+      <div class="referral-banner">
+        <div class="referral-banner-heading">Get ${rate}% Referral Commission on Each Referral</div>
+        <p class="referral-banner-sub">Share your link — every friend who joins on a plan puts real money in your wallet.</p>
+        <div class="referral-math">${mathRows}</div>
+        <a class="btn btn-primary" style="background:#25D366;border-color:#25D366;margin-top:14px;display:inline-flex;align-items:center;gap:8px;"
+           href="${waShareUrl}" target="_blank" rel="noopener">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.74.46 3.43 1.33 4.92L2.05 22l5.3-1.39a9.9 9.9 0 0 0 4.69 1.19h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.87 9.87 0 0 0 12.04 2zm0 1.67c2.2 0 4.26.86 5.82 2.42a8.2 8.2 0 0 1 2.41 5.82c0 4.54-3.7 8.24-8.25 8.24a8.2 8.2 0 0 1-4.2-1.15l-.3-.18-3.14.82.84-3.06-.2-.32a8.18 8.18 0 0 1-1.26-4.37c0-4.55 3.7-8.22 8.28-8.22zm-4.5 4.5c-.15 0-.4.06-.6.3-.21.23-.8.78-.8 1.9 0 1.12.82 2.2.93 2.36.12.15 1.58 2.5 3.9 3.42 1.92.76 2.31.6 2.73.57.42-.04 1.33-.55 1.52-1.07.19-.53.19-.98.13-1.07-.05-.1-.2-.15-.42-.27-.22-.1-1.33-.66-1.54-.73-.21-.08-.36-.1-.5.1-.16.23-.6.73-.73.88-.14.15-.27.17-.5.06-.23-.1-.95-.35-1.82-1.12-.67-.6-1.13-1.33-1.26-1.56-.13-.22-.01-.35.1-.46.1-.1.22-.26.33-.4.11-.13.15-.22.22-.37.07-.15.04-.28-.02-.39-.06-.1-.5-1.23-.7-1.68-.18-.44-.37-.37-.5-.38z"/></svg>
+          WhatsApp share
+        </a>
+      </div>
+
       <div class="field" style="margin-top:20px;"><label>Your referral link</label>
         <div class="share-link-row">
           <input type="text" id="referral-link-input" value="${esc(link)}" readonly onclick="this.select()">

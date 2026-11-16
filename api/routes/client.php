@@ -370,9 +370,19 @@ route('GET', '/leaderboard', function () {
 /* ---------------- Referral ---------------- */
 route('GET', '/referral', function () {
     require_active();
+    // Main (non-renewal) plan prices, for the live "10% of ₹X = ₹Y" earnings
+    // examples on the Referral tab — kept in sync with whatever the coach
+    // actually charges, rather than hard-coded numbers in the frontend.
+    $plans = find_all('plans', ['active' => true], [['order', 'ASC'], ['priceInr', 'ASC']]);
+    $plans = array_values(array_filter($plans, fn($p) => empty($p['isTrial']) && empty($p['isRenewal']) && $p['priceInr'] > 0));
+    $planPrices = array_map(fn($p) => [
+        'name' => $p['name'], 'priceInr' => (int)$p['priceInr'],
+        'commissionInr' => (int)floor($p['priceInr'] * 0.10)
+    ], $plans);
     return [
         'referralCode' => me()['referralCode'], 'walletBalanceInr' => me()['walletBalanceInr'],
-        'referredCount' => count_rows('users', ['referredBy' => me()['id']])
+        'referredCount' => count_rows('users', ['referredBy' => me()['id']]),
+        'commissionRate' => 10, 'plans' => $planPrices
     ];
 });
 

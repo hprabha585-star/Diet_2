@@ -99,8 +99,8 @@
                 <span>Ends <b id="eat-ends">—</b></span>
               </div>
               <div class="panel-state" id="eat-state">—</div>
-              <div class="panel-countdown" id="eat-countdown">00:00:00</div>
-              <div class="panel-timer-label" id="eat-timer-label">elapsed</div>
+              <div class="panel-countdown panel-countdown-static" id="eat-countdown" style="font-size:18px;">—</div>
+              <div class="panel-timer-label" id="eat-timer-label"></div>
             </div>
           </div>
           <div class="card" id="pause-card" style="margin-top:16px;">
@@ -147,6 +147,14 @@
 
       <!-- HISTORY & WEIGHT -->
       <div class="view" id="view-history">
+        <div class="card" id="weekly-progress-card" style="display:none;margin-bottom:16px;">
+          <div id="weekly-progress-headline" style="font-size:17px;font-weight:700;"></div>
+          <p class="hint" id="weekly-progress-sub" style="margin-top:4px;"></p>
+          <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+            <button class="btn btn-primary btn-sm" onclick="shareWeeklyProgress()" id="weekly-share-btn">Share Progress to WhatsApp</button>
+            <span id="weekly-share-status" class="hint"></span>
+          </div>
+        </div>
         <div class="card">
           <h3>Log today's weight</h3>
           <div class="field" style="margin-top:14px;max-width:220px;"><label>Weight (kg)</label><input type="number" id="weight-input" step="0.1"></div>
@@ -294,6 +302,10 @@
   </div>
 </div>
 
+<!-- Renders the weekly-progress DOM card into a PNG so it can be shared
+     as an actual image (WhatsApp/Instagram/Facebook Stories) rather than
+     plain text. Loaded from jsDelivr so shared hosting needs no build step. -->
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" defer></script>
 <script src="../js/api.js"></script>
 <script src="../js/client.js"></script>
 </body>
